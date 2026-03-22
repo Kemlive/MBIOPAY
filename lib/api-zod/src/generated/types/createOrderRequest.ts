@@ -8,8 +8,6 @@
 import type { CreateOrderRequestNetwork } from "./createOrderRequestNetwork";
 
 export interface CreateOrderRequest {
-  /** Recipient phone number (e.g. 256700000000) */
   phone: string;
-  /** Mobile money network */
   network: CreateOrderRequestNetwork;
 }

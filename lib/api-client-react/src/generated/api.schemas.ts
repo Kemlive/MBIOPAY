@@ -9,9 +9,29 @@ export interface HealthStatus {
   status: string;
 }
 
-/**
- * Mobile money network
- */
+export interface WalletAddressResponse {
+  address: string;
+  network: string;
+}
+
+export interface WalletBalanceResponse {
+  /** USDT balance on the wallet */
+  usdtBalance: number;
+  /** UGX equivalent of USDT balance */
+  ugxEquivalent: number;
+  /** Current USDT to UGX rate */
+  usdtRate: number;
+  address: string;
+}
+
+export interface StatsResponse {
+  totalOrders: number;
+  completedOrders: number;
+  totalUgxPaidOut: number;
+  totalUsdtReceived: number;
+  pendingOrders: number;
+}
+
 export type CreateOrderRequestNetwork =
   (typeof CreateOrderRequestNetwork)[keyof typeof CreateOrderRequestNetwork];
 
@@ -21,15 +41,12 @@ export const CreateOrderRequestNetwork = {
 } as const;
 
 export interface CreateOrderRequest {
-  /** Recipient phone number (e.g. 256700000000) */
   phone: string;
-  /** Mobile money network */
   network: CreateOrderRequestNetwork;
 }
 
 export interface CreateOrderResponse {
   orderId: number;
-  /** USDT (TRC-20) wallet address to send funds to */
   address: string;
   message: string;
 }
@@ -53,11 +70,6 @@ export interface Order {
   txid?: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface WalletAddressResponse {
-  address: string;
-  network: string;
 }
 
 export interface ErrorResponse {

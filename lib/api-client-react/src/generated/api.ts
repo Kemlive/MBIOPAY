@@ -22,7 +22,9 @@ import type {
   ErrorResponse,
   HealthStatus,
   Order,
+  StatsResponse,
   WalletAddressResponse,
+  WalletBalanceResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -35,7 +37,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -111,7 +112,223 @@ export function useHealthCheck<
 }
 
 /**
- * Creates a new order and returns the wallet address to send USDT to
+ * @summary Get deposit wallet address
+ */
+export const getGetWalletAddressUrl = () => {
+  return `/api/wallet/address`;
+};
+
+export const getWalletAddress = async (
+  options?: RequestInit,
+): Promise<WalletAddressResponse> => {
+  return customFetch<WalletAddressResponse>(getGetWalletAddressUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWalletAddressQueryKey = () => {
+  return [`/api/wallet/address`] as const;
+};
+
+export const getGetWalletAddressQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWalletAddress>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletAddress>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWalletAddressQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWalletAddress>>
+  > = ({ signal }) => getWalletAddress({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletAddress>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWalletAddressQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWalletAddress>>
+>;
+export type GetWalletAddressQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get deposit wallet address
+ */
+
+export function useGetWalletAddress<
+  TData = Awaited<ReturnType<typeof getWalletAddress>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletAddress>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWalletAddressQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get USDT and UGX balance
+ */
+export const getGetWalletBalanceUrl = () => {
+  return `/api/wallet/balance`;
+};
+
+export const getWalletBalance = async (
+  options?: RequestInit,
+): Promise<WalletBalanceResponse> => {
+  return customFetch<WalletBalanceResponse>(getGetWalletBalanceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWalletBalanceQueryKey = () => {
+  return [`/api/wallet/balance`] as const;
+};
+
+export const getGetWalletBalanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWalletBalance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletBalance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWalletBalanceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWalletBalance>>
+  > = ({ signal }) => getWalletBalance({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletBalance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWalletBalanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWalletBalance>>
+>;
+export type GetWalletBalanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get USDT and UGX balance
+ */
+
+export function useGetWalletBalance<
+  TData = Awaited<ReturnType<typeof getWalletBalance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWalletBalance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWalletBalanceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get dashboard stats
+ */
+export const getGetStatsUrl = () => {
+  return `/api/stats`;
+};
+
+export const getStats = async (
+  options?: RequestInit,
+): Promise<StatsResponse> => {
+  return customFetch<StatsResponse>(getGetStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStatsQueryKey = () => {
+  return [`/api/stats`] as const;
+};
+
+export const getGetStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getStats>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStatsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStats>>> = ({
+    signal,
+  }) => getStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStats>>
+>;
+export type GetStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get dashboard stats
+ */
+
+export function useGetStats<
+  TData = Awaited<ReturnType<typeof getStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getStats>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Create remittance order
  */
 export const getCreateOrderUrl = () => {
@@ -198,6 +415,81 @@ export const useCreateOrder = <
 };
 
 /**
+ * @summary Get recent orders
+ */
+export const getGetRecentOrdersUrl = () => {
+  return `/api/orders/recent`;
+};
+
+export const getRecentOrders = async (
+  options?: RequestInit,
+): Promise<Order[]> => {
+  return customFetch<Order[]>(getGetRecentOrdersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRecentOrdersQueryKey = () => {
+  return [`/api/orders/recent`] as const;
+};
+
+export const getGetRecentOrdersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRecentOrders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRecentOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRecentOrdersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentOrders>>> = ({
+    signal,
+  }) => getRecentOrders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRecentOrders>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRecentOrdersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRecentOrders>>
+>;
+export type GetRecentOrdersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent orders
+ */
+
+export function useGetRecentOrders<
+  TData = Awaited<ReturnType<typeof getRecentOrders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRecentOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRecentOrdersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get order status
  */
 export const getGetOrderUrl = (id: number) => {
@@ -274,156 +566,6 @@ export function useGetOrder<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetOrderQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Get recent orders
- */
-export const getGetRecentOrdersUrl = () => {
-  return `/api/orders/recent`;
-};
-
-export const getRecentOrders = async (
-  options?: RequestInit,
-): Promise<Order[]> => {
-  return customFetch<Order[]>(getGetRecentOrdersUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetRecentOrdersQueryKey = () => {
-  return [`/api/orders/recent`] as const;
-};
-
-export const getGetRecentOrdersQueryOptions = <
-  TData = Awaited<ReturnType<typeof getRecentOrders>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getRecentOrders>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetRecentOrdersQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentOrders>>> = ({
-    signal,
-  }) => getRecentOrders({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getRecentOrders>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetRecentOrdersQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getRecentOrders>>
->;
-export type GetRecentOrdersQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get recent orders
- */
-
-export function useGetRecentOrders<
-  TData = Awaited<ReturnType<typeof getRecentOrders>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getRecentOrders>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetRecentOrdersQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Get deposit wallet address
- */
-export const getGetWalletAddressUrl = () => {
-  return `/api/wallet/address`;
-};
-
-export const getWalletAddress = async (
-  options?: RequestInit,
-): Promise<WalletAddressResponse> => {
-  return customFetch<WalletAddressResponse>(getGetWalletAddressUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetWalletAddressQueryKey = () => {
-  return [`/api/wallet/address`] as const;
-};
-
-export const getGetWalletAddressQueryOptions = <
-  TData = Awaited<ReturnType<typeof getWalletAddress>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getWalletAddress>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetWalletAddressQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getWalletAddress>>
-  > = ({ signal }) => getWalletAddress({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getWalletAddress>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetWalletAddressQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getWalletAddress>>
->;
-export type GetWalletAddressQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get deposit wallet address
- */
-
-export function useGetWalletAddress<
-  TData = Awaited<ReturnType<typeof getWalletAddress>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getWalletAddress>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetWalletAddressQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -28,26 +28,28 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 :root {
-  /* Enforcing a dark, sleek fintech theme universally */
-  --background: 222 47% 8%; /* Very dark slate/navy */
+  /* Dark sleek fintech theme */
+  --background: 222 47% 6%;
   --foreground: 210 40% 98%;
 
-  --card: 222 47% 11%;
+  --card: 222 47% 9%;
   --card-foreground: 210 40% 98%;
 
-  --popover: 222 47% 11%;
+  --popover: 222 47% 9%;
   --popover-foreground: 210 40% 98%;
 
-  --primary: 160 84% 39%; /* Emerald green for money/success */
+  --primary: 160 84% 39%; /* Emerald green */
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 217 32% 17%;
+  --secondary: 217 32% 14%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217 32% 17%;
+  --muted: 217 32% 14%;
   --muted-foreground: 215 20.2% 65.1%;
 
   --accent: 199 89% 48%; /* Bright cyan/teal */
@@ -63,10 +65,10 @@
   --success-foreground: 0 0% 100%;
 
   --border: 217 32% 17%;
-  --input: 217 32% 17%;
+  --input: 217 32% 14%;
   --ring: 160 84% 39%;
 
-  --radius: 0.75rem;
+  --radius: 1rem;
 }
 
 @layer base {
@@ -75,15 +77,17 @@
   }
   body {
     @apply bg-background text-foreground antialiased font-sans min-h-screen selection:bg-primary/30 selection:text-primary-foreground;
-    /* Adding a subtle grain texture */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+    background-image: 
+      radial-gradient(circle at 15% 50%, rgba(20, 184, 166, 0.05), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(6, 182, 212, 0.05), transparent 25%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
 
-  /* Custom Scrollbar for a premium feel */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -106,4 +110,12 @@
   .glow-primary {
     @apply shadow-[0_0_30px_hsl(var(--primary)/0.2)];
   }
+  .glow-text {
+    text-shadow: 0 0 20px hsl(var(--primary)/0.5);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }

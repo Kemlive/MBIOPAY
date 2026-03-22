@@ -13,4 +13,6 @@ export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./order";
 export * from "./orderStatus";
+export * from "./statsResponse";
 export * from "./walletAddressResponse";
+export * from "./walletBalanceResponse";

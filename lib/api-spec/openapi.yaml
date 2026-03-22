@@ -9,6 +9,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: wallet
+    description: Wallet and balance operations
   - name: orders
     description: Remittance order operations
 paths:
@@ -17,7 +19,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -25,12 +26,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /wallet/address:
+    get:
+      operationId: getWalletAddress
+      tags: [wallet]
+      summary: Get deposit wallet address
+      responses:
+        "200":
+          description: Wallet address and network info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletAddressResponse"
+
+  /wallet/balance:
+    get:
+      operationId: getWalletBalance
+      tags: [wallet]
+      summary: Get USDT and UGX balance
+      responses:
+        "200":
+          description: Balance details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBalanceResponse"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [wallet]
+      summary: Get dashboard stats
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
   /orders:
     post:
       operationId: createOrder
       tags: [orders]
       summary: Create remittance order
-      description: Creates a new order and returns the wallet address to send USDT to
       requestBody:
         required: true
         content:
@@ -50,6 +90,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/recent:
+    get:
+      operationId: getRecentOrders
+      tags: [orders]
+      summary: Get recent orders
+      responses:
+        "200":
+          description: List of recent orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
   /orders/{id}:
     get:
       operationId: getOrder
@@ -69,37 +125,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Order"
         "404":
-          description: Order not found
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /orders/recent:
-    get:
-      operationId: getRecentOrders
-      tags: [orders]
-      summary: Get recent orders
-      responses:
-        "200":
-          description: List of recent orders
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Order"
-  /wallet/address:
-    get:
-      operationId: getWalletAddress
-      tags: [orders]
-      summary: Get deposit wallet address
-      responses:
-        "200":
-          description: Wallet address
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WalletAddressResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -107,21 +138,58 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
+
+    WalletAddressResponse:
+      type: object
+      properties:
+        address:
+          type: string
+        network:
+          type: string
+      required: [address, network]
+
+    WalletBalanceResponse:
+      type: object
+      properties:
+        usdtBalance:
+          type: number
+          description: USDT balance on the wallet
+        ugxEquivalent:
+          type: number
+          description: UGX equivalent of USDT balance
+        usdtRate:
+          type: number
+          description: Current USDT to UGX rate
+        address:
+          type: string
+      required: [usdtBalance, ugxEquivalent, usdtRate, address]
+
+    StatsResponse:
+      type: object
+      properties:
+        totalOrders:
+          type: integer
+        completedOrders:
+          type: integer
+        totalUgxPaidOut:
+          type: number
+        totalUsdtReceived:
+          type: number
+        pendingOrders:
+          type: integer
+      required: [totalOrders, completedOrders, totalUgxPaidOut, totalUsdtReceived, pendingOrders]
+
     CreateOrderRequest:
       type: object
       properties:
         phone:
           type: string
-          description: Recipient phone number (e.g. 256700000000)
         network:
           type: string
           enum: [MTN, Airtel]
-          description: Mobile money network
-      required:
-        - phone
-        - network
+      required: [phone, network]
+
     CreateOrderResponse:
       type: object
       properties:
@@ -129,13 +197,10 @@ components:
           type: integer
         address:
           type: string
-          description: USDT (TRC-20) wallet address to send funds to
         message:
           type: string
-      required:
-        - orderId
-        - address
-        - message
+      required: [orderId, address, message]
+
     Order:
       type: object
       properties:
@@ -163,27 +228,11 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required:
-        - id
-        - phone
-        - network
-        - status
-        - createdAt
-        - updatedAt
-    WalletAddressResponse:
-      type: object
-      properties:
-        address:
-          type: string
-        network:
-          type: string
-      required:
-        - address
-        - network
+      required: [id, phone, network, status, createdAt, updatedAt]
+
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-      required:
-        - error
+      required: [error]

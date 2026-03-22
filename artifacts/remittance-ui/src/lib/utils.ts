@@ -5,13 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatAddress(address: string) {
-  if (!address || address.length < 10) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+export function formatCurrency(value: number, currency: string = "UGX", decimals: number = 0) {
+  return new Intl.NumberFormat("en-UG", {
+    style: "currency",
+    currency: currency,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
 }
 
-export function formatPhone(phone: string) {
-  if (!phone) return "";
-  if (phone.length <= 6) return phone;
-  return `+${phone.slice(0, 3)} ${phone.slice(3, 6)} *** ${phone.slice(-3)}`;
+export function formatNumber(value: number, decimals: number = 2) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
 }

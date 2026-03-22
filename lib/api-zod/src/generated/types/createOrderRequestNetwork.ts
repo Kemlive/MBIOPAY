@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Mobile money network
- */
 export type CreateOrderRequestNetwork =
   (typeof CreateOrderRequestNetwork)[keyof typeof CreateOrderRequestNetwork];
 

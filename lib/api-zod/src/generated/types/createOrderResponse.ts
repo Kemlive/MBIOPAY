@@ -8,7 +8,6 @@
 
 export interface CreateOrderResponse {
   orderId: number;
-  /** USDT (TRC-20) wallet address to send funds to */
   address: string;
   message: string;
 }

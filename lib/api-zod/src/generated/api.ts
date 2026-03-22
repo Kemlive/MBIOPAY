@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,31 +15,40 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Creates a new order and returns the wallet address to send USDT to
- * @summary Create remittance order
+ * @summary Get deposit wallet address
  */
-export const CreateOrderBody = zod.object({
-  phone: zod.string().describe("Recipient phone number (e.g. 256700000000)"),
-  network: zod.enum(["MTN", "Airtel"]).describe("Mobile money network"),
+export const GetWalletAddressResponse = zod.object({
+  address: zod.string(),
+  network: zod.string(),
 });
 
 /**
- * @summary Get order status
+ * @summary Get USDT and UGX balance
  */
-export const GetOrderParams = zod.object({
-  id: zod.coerce.number(),
+export const GetWalletBalanceResponse = zod.object({
+  usdtBalance: zod.number().describe("USDT balance on the wallet"),
+  ugxEquivalent: zod.number().describe("UGX equivalent of USDT balance"),
+  usdtRate: zod.number().describe("Current USDT to UGX rate"),
+  address: zod.string(),
 });
 
-export const GetOrderResponse = zod.object({
-  id: zod.number(),
+/**
+ * @summary Get dashboard stats
+ */
+export const GetStatsResponse = zod.object({
+  totalOrders: zod.number(),
+  completedOrders: zod.number(),
+  totalUgxPaidOut: zod.number(),
+  totalUsdtReceived: zod.number(),
+  pendingOrders: zod.number(),
+});
+
+/**
+ * @summary Create remittance order
+ */
+export const CreateOrderBody = zod.object({
   phone: zod.string(),
-  network: zod.string(),
-  amount: zod.number().nullish(),
-  ugxAmount: zod.number().nullish(),
-  status: zod.enum(["waiting", "processing", "completed", "failed"]),
-  txid: zod.string().nullish(),
-  createdAt: zod.date(),
-  updatedAt: zod.date(),
+  network: zod.enum(["MTN", "Airtel"]),
 });
 
 /**
@@ -60,9 +68,20 @@ export const GetRecentOrdersResponseItem = zod.object({
 export const GetRecentOrdersResponse = zod.array(GetRecentOrdersResponseItem);
 
 /**
- * @summary Get deposit wallet address
+ * @summary Get order status
  */
-export const GetWalletAddressResponse = zod.object({
-  address: zod.string(),
+export const GetOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetOrderResponse = zod.object({
+  id: zod.number(),
+  phone: zod.string(),
   network: zod.string(),
+  amount: zod.number().nullish(),
+  ugxAmount: zod.number().nullish(),
+  status: zod.enum(["waiting", "processing", "completed", "failed"]),
+  txid: zod.string().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
