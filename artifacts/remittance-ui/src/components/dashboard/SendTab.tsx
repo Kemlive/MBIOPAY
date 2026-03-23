@@ -7,6 +7,7 @@ import {
   Copy, CheckCircle2, Phone, ArrowRight, Loader2, SmartphoneNfc,
   Landmark, AlertCircle, ArrowLeft, RefreshCw, Banknote, Percent,
   Clock, WifiOff, TimerOff, UserCheck, ShieldAlert, User,
+  Shield, Zap, RotateCcw, Scan, Send, BadgeCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -56,6 +57,55 @@ function CountdownBadge({ secondsLeft }: { secondsLeft: number }) {
   );
 }
 
+const QUOTE_LOCK_SECS = 3 * 60; // 3-minute rate lock
+
+function useQuoteLock(lockedAt: number | null) {
+  const [secsLeft, setSecsLeft] = useState<number>(QUOTE_LOCK_SECS);
+  useEffect(() => {
+    if (!lockedAt) { setSecsLeft(QUOTE_LOCK_SECS); return; }
+    const update = () => {
+      const elapsed = Math.floor((Date.now() - lockedAt) / 1000);
+      setSecsLeft(Math.max(0, QUOTE_LOCK_SECS - elapsed));
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [lockedAt]);
+  return secsLeft;
+}
+
+function QuoteLockBadge({ secsLeft }: { secsLeft: number }) {
+  const mins = Math.floor(secsLeft / 60);
+  const secs = secsLeft % 60;
+  const pct = (secsLeft / QUOTE_LOCK_SECS) * 100;
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${
+      secsLeft === 0
+        ? "bg-destructive/10 border-destructive/30 text-destructive"
+        : secsLeft <= 30
+        ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
+        : "bg-primary/8 border-primary/20 text-primary"
+    }`}>
+      <div className="relative w-4 h-4 shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 -rotate-90">
+          <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2" />
+          <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeDasharray={`${(pct / 100) * 37.7} 37.7`} strokeLinecap="round" />
+        </svg>
+      </div>
+      {secsLeft === 0
+        ? "Rate expired — go back to refresh"
+        : <><span className="font-mono">{mins}:{secs.toString().padStart(2, "0")}</span> &nbsp;Rate locked</>}
+    </div>
+  );
+}
+
+const TRUST_BADGES = [
+  { icon: Shield, label: "Funds Protected" },
+  { icon: RotateCcw, label: "Auto-refund if Failed" },
+  { icon: Zap, label: "~2 min Arrival" },
+];
+
 export function SendTab() {
   const [step, setStep] = useState<Step>(1);
   const [dir, setDir] = useState(1);
@@ -75,6 +125,8 @@ export function SendTab() {
   const [nameResolveError, setNameResolveError] = useState("");
   const [resolvingName, setResolvingName] = useState(false);
   const [nameTestMode, setNameTestMode] = useState(false);
+  const [quoteLockedAt, setQuoteLockedAt] = useState<number | null>(null);
+  const quoteLockSecsLeft = useQuoteLock(step === 2 ? quoteLockedAt : null);
 
   // Auto-resolve when phone + network change (debounced)
   useEffect(() => {
@@ -186,6 +238,7 @@ export function SendTab() {
     if (!valid) return;
 
     await fetchQuote();
+    setQuoteLockedAt(Date.now());
     goTo(2);
   };
 
@@ -220,6 +273,7 @@ export function SendTab() {
     setExpiresAt(null);
     setResolvedName(null);
     setNameResolveFailed(false);
+    setQuoteLockedAt(null);
     goTo(1, -1);
     checkServiceStatus();
   };
@@ -377,12 +431,26 @@ export function SendTab() {
         {/* ===== STEP 2: Quote + Name Confirmation ===== */}
         {step === 2 && (
           <motion.div key="step2" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.25 }}>
-            <Card className="border-primary/20">
-              <CardHeader>
-                <CardTitle className="text-2xl font-display">Confirm Transfer</CardTitle>
-                <CardDescription>Verify the recipient and review the breakdown.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Card className="border-primary/20 overflow-hidden relative">
+              {/* Rate lock header bar */}
+              <div className="flex items-center justify-between px-5 py-3 bg-secondary/30 border-b border-border/50">
+                <p className="text-xs text-muted-foreground font-medium">Confirm Transfer</p>
+                <QuoteLockBadge secsLeft={quoteLockSecsLeft} />
+              </div>
+
+              {/* Expired overlay */}
+              {quoteLockSecsLeft === 0 && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/90 backdrop-blur-sm rounded-xl">
+                  <TimerOff className="w-10 h-10 text-destructive" />
+                  <p className="text-lg font-display font-bold text-destructive">Rate Expired</p>
+                  <p className="text-sm text-muted-foreground text-center px-8">The 3-minute rate lock has passed. Go back to get a fresh quote.</p>
+                  <Button variant="outline" onClick={() => goTo(1, -1)} className="gap-2">
+                    <RotateCcw className="w-4 h-4" /> Refresh Rate
+                  </Button>
+                </div>
+              )}
+
+              <CardContent className="space-y-4 pt-5">
 
                 {/* Recipient name verification — most prominent element */}
                 <div className={`rounded-xl border-2 p-4 ${
@@ -448,9 +516,14 @@ export function SendTab() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
-                  <Clock className="w-3.5 h-3.5 shrink-0" />
-                  You'll have <span className="font-semibold text-foreground mx-1">30 minutes</span> to send the USDT once the order is created.
+                {/* Trust badges */}
+                <div className="grid grid-cols-3 gap-2">
+                  {TRUST_BADGES.map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex flex-col items-center gap-1.5 bg-secondary/30 border border-border/40 rounded-xl py-3 px-2 text-center">
+                      <Icon className="w-4 h-4 text-primary" />
+                      <span className="text-[10px] font-medium text-muted-foreground leading-tight">{label}</span>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Unverified name warning */}
@@ -458,7 +531,7 @@ export function SendTab() {
                   <div className="flex items-start gap-2 text-sm bg-orange-500/8 border border-orange-500/25 rounded-xl px-4 py-3">
                     <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
                     <p className="text-orange-300 text-xs leading-relaxed">
-                      We couldn't verify the account name for this number. Please double-check the phone number and network before proceeding.
+                      We couldn't verify the account name for this number. Please double-check before proceeding.
                     </p>
                   </div>
                 )}
@@ -466,14 +539,14 @@ export function SendTab() {
                 <Button
                   className="w-full text-lg h-14"
                   onClick={handleConfirm}
-                  disabled={createOrder.isPending}
+                  disabled={createOrder.isPending || quoteLockSecsLeft === 0}
                 >
                   {createOrder.isPending ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...</>
+                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Creating Order...</>
                   ) : resolvedName ? (
                     <><UserCheck className="mr-2 h-5 w-5" /> Confirm — Send to {resolvedName.split(" ")[0]}</>
                   ) : (
-                    <>Confirm & Proceed <ArrowRight className="ml-2 h-5 w-5" /></>
+                    <>Confirm & Create Order <ArrowRight className="ml-2 h-5 w-5" /></>
                   )}
                 </Button>
 
@@ -521,13 +594,36 @@ export function SendTab() {
 
                 {/* Waiting */}
                 {(!order || order.status === "waiting") && !isExpired && (
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="flex flex-wrap items-center justify-center gap-2">
+                  <div className="flex flex-col items-center space-y-5">
+
+                    {/* Status + timer */}
+                    <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                       <div className="inline-flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-full font-medium text-sm">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Waiting for your payment...
+                        Waiting for your USDT...
                       </div>
                       {secondsLeft !== null && expiresAt && <CountdownBadge secondsLeft={secondsLeft} />}
+                    </div>
+
+                    {/* What happens next — process pipeline */}
+                    <div className="w-full bg-secondary/20 border border-border/40 rounded-xl overflow-hidden">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-1">What happens next</p>
+                      {[
+                        { icon: Scan, label: "TRON blockchain detected", sub: "We watch your deposit address every 15s", done: false, active: true },
+                        { icon: BadgeCheck, label: "Deposit confirmed", sub: "3 block confirmations on TRON", done: false, active: false },
+                        { icon: Send, label: `UGX sent to ${network}`, sub: resolvedName ? `${resolvedName} · ${phone}` : phone, done: false, active: false },
+                      ].map((s, i) => (
+                        <div key={i} className="flex items-start gap-3 px-4 py-3 border-t border-border/30 first:border-t-0">
+                          <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${s.active ? "bg-yellow-500/15 text-yellow-400" : "bg-secondary text-muted-foreground"}`}>
+                            <s.icon className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-semibold ${s.active ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</p>
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">{s.sub}</p>
+                          </div>
+                          {s.active && <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin shrink-0 mt-1" />}
+                        </div>
+                      ))}
                     </div>
 
                     {resolvedName && (
@@ -554,7 +650,7 @@ export function SendTab() {
                     </div>
 
                     {secondsLeft !== null && secondsLeft <= 5 * 60 && secondsLeft > 0 && (
-                      <p className="text-xs text-orange-400 text-center">Hurry! This order expires soon. Send your USDT now.</p>
+                      <p className="text-xs text-orange-400 text-center animate-pulse">⚡ Hurry! This order expires soon. Send your USDT now.</p>
                     )}
                   </div>
                 )}
@@ -573,55 +669,91 @@ export function SendTab() {
 
                 {/* Processing */}
                 {order?.status === "processing" && (
-                  <div className="flex flex-col items-center justify-center py-10 text-center space-y-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
-                      <div className="relative bg-primary/20 text-primary p-6 rounded-full">
-                        <RefreshCw className="h-10 w-10 animate-spin" />
+                  <div className="flex flex-col items-center justify-center space-y-5">
+                    <div className="flex flex-col items-center gap-3 py-4">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
+                        <div className="relative bg-primary/20 text-primary p-5 rounded-full">
+                          <RefreshCw className="h-8 w-8 animate-spin" />
+                        </div>
                       </div>
+                      <h3 className="text-xl font-display font-bold">Payment Received!</h3>
+                      <p className="text-muted-foreground text-sm text-center">
+                        <span className="text-foreground font-semibold">{formatNumber(order.amount ?? 0, 4)} USDT</span> confirmed — sending UGX now
+                      </p>
                     </div>
-                    <h3 className="text-xl font-display font-bold">Payment Received!</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Received <span className="text-foreground font-medium">{formatNumber(order.amount ?? 0, 4)} USDT</span>.
-                      <br />Processing mobile money payout to {resolvedName ?? phone}...
-                    </p>
+                    {/* Pipeline: steps 1 & 2 done, step 3 active */}
+                    <div className="w-full bg-secondary/20 border border-border/40 rounded-xl overflow-hidden">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-1">Processing</p>
+                      {[
+                        { icon: Scan, label: "USDT detected on TRON", sub: `${formatNumber(order.amount ?? 0, 4)} USDT received`, done: true, active: false },
+                        { icon: BadgeCheck, label: "Deposit confirmed", sub: "3 block confirmations verified", done: true, active: false },
+                        { icon: Send, label: `Sending UGX to ${network}`, sub: resolvedName ? `${resolvedName} · ${phone}` : phone, done: false, active: true },
+                      ].map((s, i) => (
+                        <div key={i} className="flex items-start gap-3 px-4 py-3 border-t border-border/30 first:border-t-0">
+                          <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${s.done ? "bg-primary/20 text-primary" : s.active ? "bg-yellow-500/15 text-yellow-400" : "bg-secondary text-muted-foreground"}`}>
+                            {s.done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <s.icon className="w-3.5 h-3.5" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-semibold ${s.done ? "text-primary" : s.active ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</p>
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">{s.sub}</p>
+                          </div>
+                          {s.active && <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin shrink-0 mt-1" />}
+                          {s.done && <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0 mt-1" />}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 {/* Completed */}
                 {order?.status === "completed" && (
-                  <div className="flex flex-col items-center justify-center py-6 text-center space-y-4">
-                    <div className="bg-primary/20 text-primary p-5 rounded-full">
-                      <CheckCircle2 className="h-12 w-12" />
+                  <div className="flex flex-col items-center justify-center py-4 text-center space-y-5">
+                    {/* Celebration animation */}
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping opacity-60" />
+                      <div className="relative bg-primary/20 text-primary p-5 rounded-full">
+                        <CheckCircle2 className="h-12 w-12" />
+                      </div>
                     </div>
-                    <h3 className="text-3xl font-display font-bold text-primary">Transfer Complete!</h3>
-                    <div className="w-full bg-secondary/30 rounded-xl p-4 space-y-3 text-left border border-border/50 text-sm">
+                    <div>
+                      <h3 className="text-3xl font-display font-bold text-primary">Money Sent!</h3>
+                      <p className="text-muted-foreground text-sm mt-1">The UGX is on its way — arrives in ~2 minutes</p>
+                    </div>
+
+                    {/* UGX amount highlight */}
+                    <div className="w-full bg-primary/8 border-2 border-primary/30 rounded-2xl py-5 px-4 flex flex-col items-center gap-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Recipient Receives</p>
+                      <p className="text-4xl font-display font-black text-primary">{formatCurrency(order.ugxAmount ?? 0)}</p>
+                      <p className="text-xs font-bold text-primary/70">UGX · {network} Mobile Money</p>
+                    </div>
+
+                    <div className="w-full bg-secondary/30 rounded-xl divide-y divide-border/50 border border-border/50 text-sm">
                       {resolvedName && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center px-4 py-3">
                           <span className="text-muted-foreground">Recipient</span>
-                          <span className="font-semibold">{resolvedName}</span>
+                          <span className="font-semibold flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-primary" />{resolvedName}</span>
                         </div>
                       )}
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">USDT Received</span>
+                      <div className="flex justify-between items-center px-4 py-3">
+                        <span className="text-muted-foreground">Phone</span>
+                        <span className="font-medium">{phone}</span>
+                      </div>
+                      <div className="flex justify-between items-center px-4 py-3">
+                        <span className="text-muted-foreground">You Sent</span>
                         <span className="font-medium">{formatNumber(order.amount ?? 0, 4)} USDT</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">UGX Sent</span>
-                        <span className="font-display font-bold text-xl text-primary">{formatCurrency(order.ugxAmount ?? 0)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Sent to</span>
-                        <span className="font-medium">{phone} ({network})</span>
-                      </div>
                       {order.txid && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center px-4 py-3">
                           <span className="text-muted-foreground">TX ID</span>
-                          <span className="font-mono text-xs text-muted-foreground truncate max-w-[150px]">{order.txid}</span>
+                          <span className="font-mono text-xs text-muted-foreground truncate max-w-[160px]">{order.txid}</span>
                         </div>
                       )}
                     </div>
-                    <Button onClick={reset} className="w-full" size="lg">New Transfer</Button>
+
+                    <Button onClick={reset} className="w-full text-lg h-14" size="lg">
+                      <RotateCcw className="mr-2 h-5 w-5" /> Send Again
+                    </Button>
                   </div>
                 )}
 
