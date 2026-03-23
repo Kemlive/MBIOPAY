@@ -96,17 +96,21 @@ router.get("/service-status", async (_req, res) => {
     const { finalRate } = await getDynamicRate();
     const minOrderUgx = Math.floor(MIN_TX_AMOUNT * finalRate * (1 - FEE_PERCENT));
     const balance = await getFlutterwaveUgxBalance();
-    const available = balance >= minOrderUgx;
+
+    // null means the balance check failed (API error) — treat as available (optimistic)
+    // Only block when we have a confirmed balance that is too low
+    const confirmedInsufficient = balance !== null && balance < minOrderUgx;
 
     res.json({
-      available,
+      available: !confirmedInsufficient,
       ugxBalance: balance,
-      reason: available
-        ? undefined
-        : "Payouts temporarily unavailable. Please try again later.",
+      reason: confirmedInsufficient
+        ? "Payouts temporarily unavailable. Please try again later."
+        : undefined,
     });
   } catch {
-    res.json({ available: false, reason: "Service status check failed. Please try again later." });
+    // On unexpected errors, stay optimistic — don't block users
+    res.json({ available: true });
   }
 });
 
@@ -192,7 +196,9 @@ router.post("/orders", requireAuth, async (req, res) => {
   const payoutUGX = Math.floor(netUsdt * finalRate);
 
   const flwBalance = await getFlutterwaveUgxBalance();
-  if (flwBalance < payoutUGX) {
+  // Only block if we have a confirmed balance that is too low.
+  // null means the balance API is unreachable — allow through optimistically.
+  if (flwBalance !== null && flwBalance < payoutUGX) {
     res.status(503).json({
       error: "Payouts are temporarily unavailable due to insufficient funds. Please try again later.",
     });

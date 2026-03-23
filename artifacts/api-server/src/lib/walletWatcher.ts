@@ -43,7 +43,7 @@ export async function createDepositAccount(): Promise<{ address: string; encrypt
 let cachedFlwBalance: { ugx: number; fetchedAt: number } | null = null;
 const FLW_BALANCE_TTL_MS = 30_000;
 
-export async function getFlutterwaveUgxBalance(): Promise<number> {
+export async function getFlutterwaveUgxBalance(): Promise<number | null> {
   if (cachedFlwBalance && Date.now() - cachedFlwBalance.fetchedAt < FLW_BALANCE_TTL_MS) {
     return cachedFlwBalance.ugx;
   }
@@ -57,7 +57,8 @@ export async function getFlutterwaveUgxBalance(): Promise<number> {
     return ugx;
   } catch (err) {
     logger.warn({ err }, "Could not fetch Flutterwave balance");
-    return cachedFlwBalance?.ugx ?? 0;
+    // Return cached value if available, otherwise null (unknown — do NOT assume zero)
+    return cachedFlwBalance?.ugx ?? null;
   }
 }
 

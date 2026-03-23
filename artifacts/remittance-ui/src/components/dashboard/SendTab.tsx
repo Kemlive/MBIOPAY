@@ -113,8 +113,9 @@ export function SendTab() {
       setServiceAvailable(data.available);
       setServiceReason(data.reason ?? "");
     } catch {
-      setServiceAvailable(false);
-      setServiceReason("Could not reach service. Please check your connection.");
+      // Network error — don't block the user, let them try
+      setServiceAvailable(null);
+      setServiceReason("");
     }
   };
 
