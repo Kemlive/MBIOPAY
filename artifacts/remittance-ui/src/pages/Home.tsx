@@ -3,7 +3,7 @@ import { DashboardTab } from "@/components/dashboard/DashboardTab";
 import { DepositTab } from "@/components/dashboard/DepositTab";
 import { SendTab } from "@/components/dashboard/SendTab";
 import SettingsPage from "@/pages/SettingsPage";
-import { BarChart3, Download, Send, ArrowLeftRight, Settings } from "lucide-react";
+import { BarChart3, Download, Send, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -30,9 +30,11 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-primary flex items-center justify-center shadow-lg shadow-primary/20">
-              <ArrowLeftRight className="h-5 w-5 text-white" />
-            </div>
+            <img
+              src="/images/logo-icon.png"
+              alt="MBIO PAY"
+              className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-primary/20"
+            />
             <div className="flex items-baseline gap-0.5">
               <span className="font-display text-xl font-bold tracking-tight text-foreground">MBIO</span>
               <span className="font-display text-xl font-bold tracking-tight text-primary ml-1">PAY</span>

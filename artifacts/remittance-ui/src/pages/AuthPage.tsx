@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeftRight, Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 type Mode = "login" | "signup";
@@ -35,9 +35,11 @@ export default function AuthPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-primary flex items-center justify-center shadow-lg shadow-primary/30">
-          <ArrowLeftRight className="h-6 w-6 text-white" />
-        </div>
+        <img
+          src="/images/logo-icon.png"
+          alt="MBIO PAY"
+          className="h-12 w-12 rounded-2xl object-cover shadow-lg shadow-primary/30"
+        />
         <div className="flex items-baseline gap-1">
           <span className="font-display text-2xl font-bold text-foreground">MBIO</span>
           <span className="font-display text-2xl font-bold text-primary">PAY</span>
