@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import {
   Camera, User, Mail, Hash, Edit2, Lock, Check, X,
   Loader2, Copy, CheckCircle2, LogOut, Calendar,
+  KeyRound, Shield, ChevronRight, Eye, EyeOff,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -27,18 +28,71 @@ function resizeImageToBase64(file: File, maxPx = 256): Promise<string> {
   });
 }
 
-interface FieldRowProps {
-  label: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}
-function FieldRow({ label, icon, children }: FieldRowProps) {
+function SectionHeader({ label }: { label: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-        {icon} {label}
-      </label>
-      {children}
+    <h3 className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-widest mb-3">
+      {label}
+    </h3>
+  );
+}
+
+function FieldLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <p className="text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+      {icon}
+      {label}
+    </p>
+  );
+}
+
+function ReadOnlyField({ value, badge }: { value: string; badge?: string }) {
+  return (
+    <div className="flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
+      <span className="text-sm text-foreground">{value}</span>
+      {badge && (
+        <span className="text-[10px] bg-secondary text-muted-foreground border border-border/50 rounded-md px-2 py-0.5 font-medium">
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PasswordInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  autoFocus,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-muted-foreground">{label}</label>
+      <div className="relative">
+        <input
+          autoFocus={autoFocus}
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full bg-input/50 border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring pr-10"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          tabIndex={-1}
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
     </div>
   );
 }
@@ -47,25 +101,27 @@ export default function SettingsPage() {
   const { user, refreshUser, logout } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Display name state
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [editingDisplay, setEditingDisplay] = useState(false);
   const [savingDisplay, setSavingDisplay] = useState(false);
 
-  // Username state
   const [newUsername, setNewUsername] = useState(user?.username ?? "");
   const [editingUsername, setEditingUsername] = useState(false);
   const [savingUsername, setSavingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState("");
 
-  // Avatar state
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // UID copy
   const [uidCopied, setUidCopied] = useState(false);
-
-  // Generic save error
   const [saveError, setSaveError] = useState("");
+
+  const [changingPw, setChangingPw] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [savingPw, setSavingPw] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState("");
 
   const copyUid = () => {
     if (user?.uid) {
@@ -129,6 +185,40 @@ export default function SettingsPage() {
     }
   };
 
+  const savePassword = async () => {
+    setPwError("");
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+    if (newPw.length < 8) {
+      setPwError("New password must be at least 8 characters");
+      return;
+    }
+    setSavingPw(true);
+    try {
+      await apiFetch("/api/profile/password", {
+        method: "PATCH",
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      });
+      setPwSuccess("Password updated. You'll be signed out.");
+      setTimeout(() => logout(), 2000);
+    } catch (err: any) {
+      setPwError(err.message ?? "Failed to change password");
+    } finally {
+      setSavingPw(false);
+    }
+  };
+
+  const cancelPassword = () => {
+    setChangingPw(false);
+    setCurrentPw("");
+    setNewPw("");
+    setConfirmPw("");
+    setPwError("");
+    setPwSuccess("");
+  };
+
   if (!user) return null;
 
   const initials = (user.displayName || user.username || "?")
@@ -139,64 +229,52 @@ export default function SettingsPage() {
     .slice(0, 2);
 
   return (
-    <div className="max-w-xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
+    <div className="max-w-xl mx-auto space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+      {/* Page title */}
       <div>
         <h2 className="text-2xl font-display font-bold text-foreground">Profile & Settings</h2>
-        <p className="text-muted-foreground mt-1 text-sm">Manage your account information</p>
+        <p className="text-muted-foreground mt-1 text-sm">Manage your account information and security</p>
       </div>
 
-      {/* Avatar card */}
+      {/* Avatar */}
       <div className="bg-card border border-border rounded-2xl p-6 flex flex-col items-center gap-4">
-        <div className="relative group">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-primary/30 bg-secondary flex items-center justify-center">
+        <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
+          <div className="w-20 h-20 rounded-full overflow-hidden border-[3px] border-primary/40 bg-secondary flex items-center justify-center">
             {user.avatarUrl ? (
               <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-3xl font-display font-bold text-primary">{initials}</span>
+              <span className="text-2xl font-display font-bold text-primary">{initials}</span>
             )}
           </div>
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={avatarUploading}
-            className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-          >
+          <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             {avatarUploading ? (
-              <Loader2 className="w-6 h-6 text-white animate-spin" />
+              <Loader2 className="w-5 h-5 text-white animate-spin" />
             ) : (
-              <Camera className="w-6 h-6 text-white" />
+              <Camera className="w-5 h-5 text-white" />
             )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleAvatarChange}
-          />
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+        </div>
+        <div className="text-center">
+          <p className="font-display font-bold text-lg text-foreground">{user.displayName || user.username}</p>
+          <p className="text-muted-foreground text-sm">@{user.username}</p>
         </div>
         <button
           onClick={() => fileRef.current?.click()}
           disabled={avatarUploading}
-          className="text-sm text-primary hover:underline font-medium"
+          className="text-xs text-primary hover:underline font-medium"
         >
           {avatarUploading ? "Uploading..." : "Change photo"}
         </button>
-
-        <div className="text-center">
-          <p className="font-display font-bold text-lg text-foreground">
-            {user.displayName || user.username}
-          </p>
-          <p className="text-muted-foreground text-sm">@{user.username}</p>
-        </div>
       </div>
 
-      {/* Profile fields */}
+      {/* Personal Info */}
       <div className="bg-card border border-border rounded-2xl p-6 space-y-5">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Info</h3>
+        <SectionHeader label="Personal Info" />
 
         {/* Display Name */}
-        <FieldRow label="Display Name" icon={<User className="w-3.5 h-3.5" />}>
+        <div>
+          <FieldLabel icon={<User className="w-3 h-3" />} label="Display Name" />
           {editingDisplay ? (
             <div className="flex gap-2">
               <input
@@ -206,7 +284,7 @@ export default function SettingsPage() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={60}
                 placeholder="Your display name"
-                className="flex-1 bg-input/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="flex-1 bg-input/50 border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <button
                 onClick={saveDisplayName}
@@ -223,7 +301,7 @@ export default function SettingsPage() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between bg-secondary/40 border border-border/50 rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
               <span className="text-sm text-foreground">
                 {user.displayName || <span className="text-muted-foreground italic">Not set</span>}
               </span>
@@ -235,30 +313,26 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
-        </FieldRow>
+        </div>
 
         {/* Username */}
-        <FieldRow
-          label={
-            user.usernameSet
-              ? "Username (locked — already changed once)"
-              : "Username (can be changed once)"
-          }
-          icon={user.usernameSet ? <Lock className="w-3.5 h-3.5" /> : <Edit2 className="w-3.5 h-3.5" />}
-        >
+        <div>
+          <FieldLabel
+            icon={user.usernameSet ? <Lock className="w-3 h-3" /> : <Edit2 className="w-3 h-3" />}
+            label={user.usernameSet ? "Username (locked)" : "Username (can be changed once)"}
+          />
           {editingUsername && !user.usernameSet ? (
             <div className="space-y-1.5">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
                   <input
                     autoFocus
                     type="text"
                     value={newUsername}
                     onChange={(e) => { setNewUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, "")); setUsernameError(""); }}
                     maxLength={30}
-                    placeholder="new_username"
-                    className="w-full bg-input/50 border border-border rounded-xl pl-7 pr-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full bg-input/50 border border-border rounded-xl pl-8 pr-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <button
@@ -279,7 +353,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">Only letters, numbers and underscores. This can only be changed once.</p>
             </div>
           ) : (
-            <div className="flex items-center justify-between bg-secondary/40 border border-border/50 rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
               <span className="text-sm text-foreground font-medium">@{user.username}</span>
               {user.usernameSet ? (
                 <Lock className="w-4 h-4 text-muted-foreground" />
@@ -293,54 +367,137 @@ export default function SettingsPage() {
               )}
             </div>
           )}
-        </FieldRow>
+        </div>
 
-        {/* Email (read-only) */}
-        <FieldRow label="Email" icon={<Mail className="w-3.5 h-3.5" />}>
-          <div className="flex items-center bg-secondary/40 border border-border/50 rounded-xl px-4 py-3 gap-2">
-            <span className="text-sm text-foreground flex-1">{user.email}</span>
-            <span className="text-[10px] bg-secondary text-muted-foreground rounded-md px-1.5 py-0.5">Read only</span>
-          </div>
-        </FieldRow>
+        {/* Email */}
+        <div>
+          <FieldLabel icon={<Mail className="w-3 h-3" />} label="Email" />
+          <ReadOnlyField value={user.email} badge="Read only" />
+        </div>
 
         {saveError && (
-          <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl px-3 py-2">
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl px-4 py-3">
             {saveError}
           </div>
         )}
       </div>
 
-      {/* Account info card */}
-      <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Account</h3>
+      {/* Security */}
+      <div className="bg-card border border-border rounded-2xl p-6 space-y-5">
+        <SectionHeader label="Security" />
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1">
-              <Hash className="w-3 h-3" /> Your UID
-            </p>
-            <p className="font-mono text-lg font-bold text-primary">{user.uid}</p>
+        {/* Password */}
+        <div>
+          <FieldLabel icon={<KeyRound className="w-3 h-3" />} label="Password" />
+
+          {!changingPw ? (
+            <button
+              onClick={() => setChangingPw(true)}
+              className="w-full flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3 hover:border-primary/40 transition-colors group"
+            >
+              <span className="text-sm text-foreground">••••••••••••</span>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-primary transition-colors font-medium">
+                Change <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+            </button>
+          ) : (
+            <div className="space-y-3 bg-secondary/20 border border-border/40 rounded-xl p-4">
+              <PasswordInput
+                label="Current password"
+                value={currentPw}
+                onChange={setCurrentPw}
+                placeholder="Enter current password"
+                autoFocus
+              />
+              <PasswordInput
+                label="New password"
+                value={newPw}
+                onChange={setNewPw}
+                placeholder="Min 8 characters"
+              />
+              <PasswordInput
+                label="Confirm new password"
+                value={confirmPw}
+                onChange={setConfirmPw}
+                placeholder="Repeat new password"
+              />
+
+              {pwError && (
+                <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                  {pwError}
+                </p>
+              )}
+              {pwSuccess && (
+                <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {pwSuccess}
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={savePassword}
+                  disabled={savingPw || !currentPw || !newPw || !confirmPw}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50 transition-opacity"
+                >
+                  {savingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Update password
+                </button>
+                <button
+                  onClick={cancelPassword}
+                  disabled={savingPw}
+                  className="px-4 rounded-xl bg-secondary text-muted-foreground text-sm font-medium hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2FA */}
+        <div>
+          <FieldLabel icon={<Shield className="w-3 h-3" />} label="Two-Factor Authentication" />
+          <div className="flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-foreground">Authenticator App</span>
+              <span className="text-xs text-muted-foreground mt-0.5">Not enabled</span>
+            </div>
+            <span className="text-[10px] bg-secondary border border-border/50 text-muted-foreground rounded-md px-2 py-0.5 font-medium">
+              Coming soon
+            </span>
           </div>
-          <button
-            onClick={copyUid}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors bg-secondary/50 border border-border/50 rounded-lg px-3 py-2"
-          >
-            {uidCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
-            {uidCopied ? "Copied!" : "Copy"}
-          </button>
+        </div>
+      </div>
+
+      {/* Account */}
+      <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+        <SectionHeader label="Account" />
+
+        <div>
+          <FieldLabel icon={<Hash className="w-3 h-3" />} label="Your UID" />
+          <div className="flex items-center justify-between bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
+            <span className="font-mono text-lg font-bold text-primary tracking-wider">{user.uid}</span>
+            <button
+              onClick={copyUid}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors bg-secondary border border-border/60 rounded-lg px-3 py-1.5 font-medium"
+            >
+              {uidCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              {uidCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
         </div>
 
         {user.createdAt && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="w-4 h-4" />
+            <Calendar className="w-4 h-4 text-muted-foreground/60" />
             Member since {format(new Date(user.createdAt), "MMMM d, yyyy")}
           </div>
         )}
       </div>
 
-      {/* Danger zone */}
+      {/* Sign out */}
       <div className="bg-card border border-border rounded-2xl p-6">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">Account Actions</h3>
+        <SectionHeader label="Account Actions" />
         <button
           onClick={logout}
           className="w-full flex items-center justify-center gap-2 border border-destructive/30 text-destructive bg-destructive/5 hover:bg-destructive/10 rounded-xl py-3 text-sm font-semibold transition-colors"
