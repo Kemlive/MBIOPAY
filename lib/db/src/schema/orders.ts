@@ -11,6 +11,8 @@ export const ordersTable = pgTable("orders", {
   ugxAmount: real("ugx_amount"),
   status: text("status").notNull().default("waiting"),
   txid: text("txid"),
+  depositAddress: text("deposit_address"),
+  encryptedPk: text("encrypted_pk"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -3,12 +3,12 @@ import axios from "axios";
 import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
 import { eq, sum, count } from "drizzle-orm";
+import { getDynamicRate, getHotWalletStats } from "../lib/dynamicRate";
 
 const router: IRouter = Router();
 
-const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const USDT_CONTRACT = process.env.USDT_CONTRACT ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_BASE = "https://api.trongrid.io";
-const UGX_RATE = 3700;
 
 async function fetchUsdtBalance(address: string): Promise<number> {
   try {
@@ -17,15 +17,9 @@ async function fetchUsdtBalance(address: string): Promise<number> {
       timeout: 10000,
     });
 
-    const trc20Balances: Array<{ [contract: string]: string }> =
-      res.data?.data?.[0]?.trc20 ?? [];
-
-    for (const entry of trc20Balances) {
-      if (entry[USDT_CONTRACT]) {
-        return parseInt(entry[USDT_CONTRACT], 10) / 1e6;
-      }
-    }
-    return 0;
+    const trc20: Array<{ key: string; value: string }> = res.data?.data?.[0]?.trc20 ?? [];
+    const usdt = trc20.find((t) => t.key === USDT_CONTRACT);
+    return usdt ? parseInt(usdt.value, 10) / 1e6 : 0;
   } catch {
     return 0;
   }
@@ -33,24 +27,34 @@ async function fetchUsdtBalance(address: string): Promise<number> {
 
 router.get("/wallet/address", (_req, res) => {
   res.json({
-    address: process.env.WALLET_ADDRESS ?? "",
+    address: process.env.HOT_WALLET ?? process.env.WALLET_ADDRESS ?? "",
     network: "TRC-20 (TRON)",
   });
 });
 
 router.get("/wallet/balance", async (req, res) => {
-  const address = process.env.WALLET_ADDRESS ?? "";
-  const usdtBalance = await fetchUsdtBalance(address);
-  const ugxEquivalent = Math.floor(usdtBalance * UGX_RATE);
+  const address = process.env.HOT_WALLET ?? process.env.WALLET_ADDRESS ?? "";
+  const [usdtBalance, rateData] = await Promise.all([
+    fetchUsdtBalance(address),
+    getDynamicRate(),
+  ]);
+  const ugxEquivalent = Math.floor(usdtBalance * rateData.finalRate);
 
-  req.log.info({ address, usdtBalance }, "Wallet balance fetched");
+  req.log.info({ address, usdtBalance, rate: rateData.finalRate }, "Wallet balance fetched");
 
   res.json({
     usdtBalance,
     ugxEquivalent,
-    usdtRate: UGX_RATE,
+    usdtRate: rateData.finalRate,
+    baseRate: rateData.base,
+    marginPct: parseFloat((rateData.margin * 100).toFixed(2)),
     address,
   });
+});
+
+router.get("/wallet/hot-stats", async (_req, res) => {
+  const stats = await getHotWalletStats();
+  res.json(stats);
 });
 
 router.get("/stats", async (_req, res) => {
@@ -74,12 +78,16 @@ router.get("/stats", async (_req, res) => {
     .from(ordersTable)
     .where(eq(ordersTable.status, "waiting"));
 
+  const rateData = await getDynamicRate();
+
   res.json({
     totalOrders: totals?.totalOrders ?? 0,
     completedOrders: completed?.completedOrders ?? 0,
     totalUgxPaidOut: Number(completed?.totalUgxPaidOut ?? 0),
     totalUsdtReceived: Number(completed?.totalUsdtReceived ?? 0),
     pendingOrders: pending?.pendingOrders ?? 0,
+    currentRate: rateData.finalRate,
+    marginPct: parseFloat((rateData.margin * 100).toFixed(2)),
   });
 });
 

@@ -3,49 +3,57 @@ import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { encrypt, decrypt } from "./encryption";
+import { getDynamicRate } from "./dynamicRate";
 
-const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const { TronWeb } = require("tronweb") as { TronWeb: any };
+
 const TRONGRID_BASE = "https://api.trongrid.io";
-const UGX_RATE = 3700;
+const USDT_CONTRACT = process.env.USDT_CONTRACT ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const MIN_CONFIRMATIONS = 3;
 
-let lastTx = "";
-let watching = false;
+// =====================
+// 🏦 TRON ACCOUNT
+// =====================
 
-interface Trc20Tx {
-  transaction_id: string;
-  to: string;
-  value: string;
-  token_info?: { decimals?: number };
-}
-
-function resolveTronApiKey(tronApiEnv: string): string {
-  if (!tronApiEnv) return "";
-  if (tronApiEnv.startsWith("http")) {
-    return "";
-  }
-  return tronApiEnv;
-}
-
-async function fetchTrc20Transactions(walletAddress: string, tronApiEnv: string): Promise<Trc20Tx[]> {
-  const apiKey = resolveTronApiKey(tronApiEnv);
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
-
-  const endpoint = `${TRONGRID_BASE}/v1/accounts/${walletAddress}/transactions/trc20`;
-
-  logger.info({ endpoint, hasApiKey: !!apiKey }, "Polling TRON wallet");
-
-  const res = await axios.get(endpoint, {
-    params: { limit: 20, contract_address: USDT_CONTRACT, only_to: "true" },
-    headers,
-    timeout: 15000,
+function getTronWeb(privateKey?: string): any {
+  return new TronWeb({
+    fullHost: TRONGRID_BASE,
+    privateKey: privateKey ?? process.env.HOT_PRIVATE_KEY ?? "",
   });
-
-  return (res.data?.data ?? []) as Trc20Tx[];
 }
 
-async function executePayout(orderId: number, phone: string, network: string, amount: number) {
-  const ugx = Math.floor(amount * UGX_RATE);
+export async function createDepositAccount(): Promise<{ address: string; encryptedPk: string }> {
+  const tw = getTronWeb();
+  const account = await tw.createAccount();
+  const address: string = account.address.base58;
+  const encryptedPk = encrypt(account.privateKey);
+  return { address, encryptedPk };
+}
+
+// =====================
+// 🔍 CONFIRMATIONS
+// =====================
+
+async function getConfirmations(txid: string, tw: TronWeb): Promise<number> {
+  try {
+    const tx = await tw.trx.getTransaction(txid) as any;
+    const block = await tw.trx.getCurrentBlock() as any;
+    const txBlock: number = tx?.blockNumber ?? 0;
+    const currentBlock: number = block?.block_header?.raw_data?.number ?? 0;
+    return currentBlock - txBlock;
+  } catch {
+    return 0;
+  }
+}
+
+// =====================
+// 💳 FLUTTERWAVE PAYOUT
+// =====================
+
+async function executePayout(orderId: number, phone: string, network: string, amount: number): Promise<void> {
+  const { finalRate } = await getDynamicRate();
+  const ugx = Math.floor(amount * finalRate);
   const flwNetwork = network === "MTN" ? "MPS" : "AIN";
 
   try {
@@ -56,8 +64,8 @@ async function executePayout(orderId: number, phone: string, network: string, am
         account_number: phone,
         amount: ugx,
         currency: "UGX",
-        narration: "Crypto Remittance Payout",
-        reference: `order-${orderId}-${Date.now()}`,
+        narration: "MBIO PAY Remittance",
+        reference: `mbio-${orderId}-${Date.now()}`,
       },
       {
         headers: {
@@ -68,18 +76,16 @@ async function executePayout(orderId: number, phone: string, network: string, am
       }
     );
 
-    logger.info({ orderId, flwResponse: response.data?.status }, "Flutterwave response");
+    logger.info({ orderId, flwStatus: response.data?.status, ugx, rate: finalRate }, "Flutterwave payout sent");
 
     await db
       .update(ordersTable)
       .set({ status: "completed", ugxAmount: ugx, updatedAt: new Date() })
       .where(eq(ordersTable.id, orderId));
-
-    logger.info({ orderId, ugx, phone, network }, "Payout completed");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const responseData = axios.isAxiosError(err) ? err.response?.data : undefined;
-    logger.error({ orderId, error: message, responseData }, "Payout failed");
+    logger.error({ orderId, error: message, responseData }, "Flutterwave payout failed");
 
     await db
       .update(ordersTable)
@@ -88,70 +94,132 @@ async function executePayout(orderId: number, phone: string, network: string, am
   }
 }
 
-async function watchWallet() {
+// =====================
+// 🔁 SWEEP
+// =====================
+
+async function sweep(order: typeof ordersTable.$inferSelect, amount: number): Promise<void> {
+  const hotWallet = process.env.HOT_WALLET;
+  if (!hotWallet || !order.encryptedPk) return;
+
+  try {
+    const pk = decrypt(order.encryptedPk);
+    const tw = getTronWeb(pk);
+    const contract = await tw.contract().at(USDT_CONTRACT);
+    await contract.transfer(hotWallet, Math.floor(amount * 1e6)).send();
+    logger.info({ orderId: order.id, amount }, "Swept to hot wallet");
+  } catch (err) {
+    logger.error({ err, orderId: order.id }, "Sweep failed");
+  }
+}
+
+// =====================
+// 🔍 WATCHER — Per-order address polling
+// =====================
+
+let watching = false;
+
+async function watchOrders(): Promise<void> {
   if (watching) return;
   watching = true;
 
   try {
-    const walletAddress = process.env.WALLET_ADDRESS;
-    const tronApi = process.env.TRON_API ?? "";
+    const tw = getTronWeb();
 
-    if (!walletAddress) {
-      logger.warn("WALLET_ADDRESS not set, skipping wallet watch");
-      watching = false;
-      return;
-    }
+    const waitingOrders = await db
+      .select()
+      .from(ordersTable)
+      .where(eq(ordersTable.status, "waiting"));
 
-    const txs = await fetchTrc20Transactions(walletAddress, tronApi);
+    for (const order of waitingOrders) {
+      if (!order.depositAddress) continue;
 
-    for (const tx of txs) {
-      if (tx.transaction_id === lastTx) break;
+      try {
+        const res = await axios.get(
+          `${TRONGRID_BASE}/v1/accounts/${order.depositAddress}/transactions/trc20`,
+          {
+            params: { limit: 5, contract_address: USDT_CONTRACT, only_to: "true" },
+            headers: { Accept: "application/json" },
+            timeout: 12000,
+          }
+        );
 
-      if (tx.to === walletAddress) {
-        const decimals = tx.token_info?.decimals ?? 6;
-        const amount = parseInt(tx.value, 10) / Math.pow(10, decimals);
+        const txs: Array<{ transaction_id: string; value: string; token_info?: { decimals?: number } }> =
+          res.data?.data ?? [];
 
-        logger.info({ txid: tx.transaction_id, amount }, "Incoming USDT detected");
+        for (const tx of txs) {
+          const decimals = tx.token_info?.decimals ?? 6;
+          const received = parseInt(tx.value, 10) / Math.pow(10, decimals);
 
-        const waitingOrders = await db
-          .select()
-          .from(ordersTable)
-          .where(eq(ordersTable.status, "waiting"))
-          .limit(1);
+          if (!order.amount || Math.abs(received - order.amount) > 0.5) continue;
 
-        const order = waitingOrders[0];
+          const confs = await getConfirmations(tx.transaction_id, tw);
+          if (confs < MIN_CONFIRMATIONS) {
+            logger.info({ txid: tx.transaction_id, confs }, "Awaiting confirmations");
+            continue;
+          }
 
-        if (order) {
           await db
             .update(ordersTable)
-            .set({
-              status: "processing",
-              amount,
-              txid: tx.transaction_id,
-              updatedAt: new Date(),
-            })
+            .set({ status: "processing", txid: tx.transaction_id, updatedAt: new Date() })
             .where(eq(ordersTable.id, order.id));
 
-          await executePayout(order.id, order.phone, order.network, amount);
-        } else {
-          logger.warn({ txid: tx.transaction_id, amount }, "No waiting order for incoming tx");
+          logger.info({ orderId: order.id, txid: tx.transaction_id, received }, "Deposit confirmed");
+
+          await sweep(order, received);
+          await executePayout(order.id, order.phone, order.network, received);
+          break;
         }
+      } catch (err) {
+        logger.warn({ err, address: order.depositAddress }, "Error checking deposit address");
       }
     }
-
-    if (txs.length > 0 && txs[0]) {
-      lastTx = txs[0].transaction_id;
-    }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ error: message }, "Wallet watcher error");
+  } catch (err) {
+    logger.error({ err }, "Watcher loop error");
   } finally {
     watching = false;
   }
 }
 
+// =====================
+// ⚖️ REBALANCE (hot → cold)
+// =====================
+
+async function rebalance(): Promise<void> {
+  const hotWallet = process.env.HOT_WALLET;
+  const coldWallet = process.env.COLD_WALLET;
+  const hotPk = process.env.HOT_PRIVATE_KEY;
+  const maxHot = parseFloat(process.env.MAX_HOT_BALANCE ?? "5000");
+  const minHot = parseFloat(process.env.MIN_HOT_BALANCE ?? "1000");
+
+  if (!hotWallet || !coldWallet || !hotPk) return;
+
+  try {
+    const tw = getTronWeb(hotPk);
+    const contract = await tw.contract().at(USDT_CONTRACT);
+
+    const rawBalance = await contract.balanceOf(hotWallet).call();
+    const balance = parseInt(rawBalance.toString(), 10) / 1e6;
+
+    if (balance > maxHot) {
+      const excess = balance - maxHot;
+      await contract.transfer(coldWallet, Math.floor(excess * 1e6)).send();
+      logger.info({ excess, balance }, "Rebalanced: excess swept to cold wallet");
+    } else if (balance < minHot) {
+      logger.warn({ balance, minHot }, "HOT WALLET BALANCE LOW — manual top-up needed");
+    }
+  } catch (err) {
+    logger.warn({ err }, "Rebalance error");
+  }
+}
+
+// =====================
+// 🚀 START
+// =====================
+
 export function startWalletWatcher() {
-  logger.info("Wallet watcher started (polling every 15s)");
-  watchWallet();
-  setInterval(watchWallet, 15000);
+  logger.info("MBIO wallet watcher started (per-order polling every 15s, rebalance every 60s)");
+  watchOrders();
+  setInterval(watchOrders, 15000);
+  setInterval(rebalance, 60000);
 }

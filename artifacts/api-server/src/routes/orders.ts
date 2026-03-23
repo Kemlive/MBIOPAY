@@ -4,10 +4,11 @@ import { ordersTable } from "@workspace/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../lib/auth-middleware";
+import { getDynamicRate } from "../lib/dynamicRate";
+import { createDepositAccount } from "../lib/walletWatcher";
 
 const router: IRouter = Router();
 
-const UGX_RATE = 3700;
 const FEE_PERCENT = 0.01;
 const MAX_TX_AMOUNT = parseFloat(process.env.MAX_TX_AMOUNT ?? "500");
 const TRADE_LIMIT_PER_MIN = parseInt(process.env.TRADE_LIMIT_PER_MIN ?? "10", 10);
@@ -28,7 +29,7 @@ function cleanupOldKeys() {
   }
 }
 
-router.get("/quote", (req, res) => {
+router.get("/quote", async (req, res) => {
   const amount = parseFloat(req.query.amount as string);
 
   if (isNaN(amount) || amount <= 0) {
@@ -41,14 +42,18 @@ router.get("/quote", (req, res) => {
     return;
   }
 
+  const { finalRate, base, margin } = await getDynamicRate();
+
   const fee = amount * FEE_PERCENT;
   const netUsdt = amount - fee;
-  const payoutUGX = Math.floor(netUsdt * UGX_RATE);
+  const payoutUGX = Math.floor(netUsdt * finalRate);
 
   res.json({
     usdtAmount: amount,
     payoutUGX,
-    usdtRate: UGX_RATE,
+    usdtRate: finalRate,
+    baseRate: base,
+    marginPct: parseFloat((margin * 100).toFixed(2)),
     fee: parseFloat(fee.toFixed(6)),
   });
 });
@@ -95,20 +100,43 @@ router.post("/orders", requireAuth, async (req, res) => {
     return;
   }
 
+  const { finalRate } = await getDynamicRate();
   const fee = expectedUsdt * FEE_PERCENT;
   const netUsdt = expectedUsdt - fee;
-  const payoutUGX = Math.floor(netUsdt * UGX_RATE);
+  const payoutUGX = Math.floor(netUsdt * finalRate);
+
+  let depositAddress: string;
+  let encryptedPk: string;
+
+  try {
+    const account = await createDepositAccount();
+    depositAddress = account.address;
+    encryptedPk = account.encryptedPk;
+  } catch {
+    depositAddress = process.env.WALLET_ADDRESS ?? "";
+    encryptedPk = "";
+  }
 
   const [order] = await db
     .insert(ordersTable)
-    .values({ phone, network, status: "waiting", userId: req.user!.id })
+    .values({
+      phone,
+      network,
+      status: "waiting",
+      userId: req.user!.id,
+      amount: expectedUsdt,
+      depositAddress,
+      encryptedPk,
+    })
     .returning();
 
   res.status(201).json({
     orderId: order.id,
-    address: process.env.WALLET_ADDRESS,
-    message: `Send exactly ${expectedUsdt} USDT (TRC-20) to the address above. Your payout of ${payoutUGX.toLocaleString()} UGX will be sent to ${phone} on ${network}.`,
+    address: depositAddress,
+    expectedUsdt,
     payoutUGX,
+    rate: finalRate,
+    message: `Send exactly ${expectedUsdt} USDT (TRC-20) to the address above. Your payout of ${payoutUGX.toLocaleString()} UGX will be sent to ${phone} on ${network}.`,
   });
 });
 
@@ -150,7 +178,8 @@ router.get("/orders/:id", async (req, res) => {
     return;
   }
 
-  res.json(order);
+  const safe = { ...order, encryptedPk: undefined };
+  res.json(safe);
 });
 
 export default router;

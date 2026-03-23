@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -30,3 +30,10 @@ timeoutMs = 20000
 [userenv.shared]
 MAX_TX_AMOUNT = "500"
 TRADE_LIMIT_PER_MIN = "10"
+USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+MIN_HOT_BALANCE = "1000"
+MAX_HOT_BALANCE = "5000"
+BASE_RATE = "3700"
+
+[nix]
+channel = "stable-25_05"
