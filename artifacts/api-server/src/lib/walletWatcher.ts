@@ -8,23 +8,40 @@ import { getDynamicRate } from "./dynamicRate";
 
 const { TronWeb } = require("tronweb") as { TronWeb: any };
 
-const TRONGRID_BASE = "https://api.trongrid.io";
 const USDT_CONTRACT = process.env.USDT_CONTRACT ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-const MIN_CONFIRMATIONS = 3;
+
+// Minimal TRC-20 ABI — avoids calling wallet/getcontract on the node
+const TRC20_ABI = [
+  { constant: true, inputs: [{ name: "_owner", type: "address" }], name: "balanceOf", outputs: [{ name: "balance", type: "uint256" }], type: "Function" },
+  { constant: false, inputs: [{ name: "_to", type: "address" }, { name: "_value", type: "uint256" }], name: "transfer", outputs: [{ name: "", type: "bool" }], type: "Function" },
+];
+
+function getUsdtContract(tw: any) {
+  return tw.contract(TRC20_ABI, USDT_CONTRACT);
+}
+
+// Always use TronGrid — the public endpoint has generous limits for monitoring.
+// If TRON_API is a bare UUID/key (not a URL), pass it as the TronGrid API key header.
+const TRONGRID_HOST = "https://api.trongrid.io";
+
+function getTronHeaders(): Record<string, string> {
+  const t = process.env.TRON_API ?? "";
+  // Only use as a header key if it looks like a UUID/token, not a URL
+  if (t && !t.startsWith("http")) return { "TRON-PRO-API-KEY": t };
+  return {};
+}
 
 // =====================
 // 🏦 TRON ACCOUNT
 // =====================
 
 function getTronWeb(privateKey?: string): any {
-  const tronApiKey = process.env.TRON_API;
   const opts: Record<string, any> = {
-    fullHost: TRONGRID_BASE,
+    fullHost: TRONGRID_HOST,
     privateKey: privateKey ?? process.env.HOT_PRIVATE_KEY ?? "",
   };
-  if (tronApiKey) {
-    opts.headers = { "TRON-PRO-API-KEY": tronApiKey };
-  }
+  const hdrs = getTronHeaders();
+  if (Object.keys(hdrs).length > 0) opts.headers = hdrs;
   return new TronWeb(opts);
 }
 
@@ -64,22 +81,6 @@ export async function getFlutterwaveUgxBalance(): Promise<number | null> {
 
 export function invalidateFlwBalanceCache() {
   cachedFlwBalance = null;
-}
-
-// =====================
-// 🔍 CONFIRMATIONS
-// =====================
-
-async function getConfirmations(txid: string, tw: TronWeb): Promise<number> {
-  try {
-    const tx = await tw.trx.getTransaction(txid) as any;
-    const block = await tw.trx.getCurrentBlock() as any;
-    const txBlock: number = tx?.blockNumber ?? 0;
-    const currentBlock: number = block?.block_header?.raw_data?.number ?? 0;
-    return currentBlock - txBlock;
-  } catch {
-    return 0;
-  }
 }
 
 // =====================
@@ -166,7 +167,7 @@ async function sweep(order: typeof ordersTable.$inferSelect, amount: number): Pr
     await withRetry(async () => {
       const pk = decrypt(order.encryptedPk!);
       const tw = getTronWeb(pk);
-      const contract = await tw.contract().at(USDT_CONTRACT);
+      const contract = getUsdtContract(tw);
       await contract.transfer(hotWallet, Math.floor(amount * 1e6)).send();
     });
     logger.info({ orderId: order.id, amount }, "Swept to hot wallet");
@@ -197,44 +198,25 @@ async function watchOrders(): Promise<void> {
       if (!order.depositAddress) continue;
 
       try {
-        const tronHeaders: Record<string, string> = { Accept: "application/json" };
-        if (process.env.TRON_API) tronHeaders["TRON-PRO-API-KEY"] = process.env.TRON_API;
+        // Use balanceOf to check confirmed USDT balance on the deposit address.
+        // This works with any TRON node (TronGrid, GetBlock, etc.) without REST-only endpoints.
+        const contract = getUsdtContract(tw);
+        const rawBalance = await contract.balanceOf(order.depositAddress).call();
+        const received = parseInt(rawBalance.toString(), 10) / 1e6;
 
-        const res = await axios.get(
-          `${TRONGRID_BASE}/v1/accounts/${order.depositAddress}/transactions/trc20`,
-          {
-            params: { limit: 5, contract_address: USDT_CONTRACT, only_to: "true" },
-            headers: tronHeaders,
-            timeout: 12000,
-          }
-        );
+        if (!order.amount || received < order.amount - 0.5) continue;
 
-        const txs: Array<{ transaction_id: string; value: string; token_info?: { decimals?: number } }> =
-          res.data?.data ?? [];
+        const txid = `balance-confirmed-${order.id}-${Date.now()}`;
 
-        for (const tx of txs) {
-          const decimals = tx.token_info?.decimals ?? 6;
-          const received = parseInt(tx.value, 10) / Math.pow(10, decimals);
+        await db
+          .update(ordersTable)
+          .set({ status: "processing", txid, updatedAt: new Date() })
+          .where(eq(ordersTable.id, order.id));
 
-          if (!order.amount || Math.abs(received - order.amount) > 0.5) continue;
+        logger.info({ orderId: order.id, received, expected: order.amount }, "Deposit confirmed via balanceOf");
 
-          const confs = await getConfirmations(tx.transaction_id, tw);
-          if (confs < MIN_CONFIRMATIONS) {
-            logger.info({ txid: tx.transaction_id, confs }, "Awaiting confirmations");
-            continue;
-          }
-
-          await db
-            .update(ordersTable)
-            .set({ status: "processing", txid: tx.transaction_id, updatedAt: new Date() })
-            .where(eq(ordersTable.id, order.id));
-
-          logger.info({ orderId: order.id, txid: tx.transaction_id, received }, "Deposit confirmed");
-
-          await sweep(order, received);
-          await executePayout(order.id, order.phone, order.network, received);
-          break;
-        }
+        await sweep(order, received);
+        await executePayout(order.id, order.phone, order.network, received);
       } catch (err) {
         logger.warn({ err, address: order.depositAddress }, "Error checking deposit address");
       }
@@ -261,7 +243,7 @@ async function rebalance(): Promise<void> {
 
   try {
     const tw = getTronWeb(hotPk);
-    const contract = await tw.contract().at(USDT_CONTRACT);
+    const contract = getUsdtContract(tw);
 
     const rawBalance = await contract.balanceOf(hotWallet).call();
     const balance = parseInt(rawBalance.toString(), 10) / 1e6;

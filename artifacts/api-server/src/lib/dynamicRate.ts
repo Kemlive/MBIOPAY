@@ -1,11 +1,34 @@
-import axios from "axios";
 import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 
-const TRONGRID_BASE = "https://api.trongrid.io";
+const { TronWeb } = require("tronweb") as { TronWeb: any };
+
 const USDT_CONTRACT = process.env.USDT_CONTRACT ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+const TRC20_ABI = [
+  { constant: true, inputs: [{ name: "_owner", type: "address" }], name: "balanceOf", outputs: [{ name: "balance", type: "uint256" }], type: "Function" },
+];
+
+// Always use public TronGrid — GetBlock URLs don't support wallet/triggerconstantcontract
+const TRONGRID_HOST = "https://api.trongrid.io";
+
+function getTronHeaders(): Record<string, string> {
+  const t = process.env.TRON_API ?? "";
+  if (t && !t.startsWith("http")) return { "TRON-PRO-API-KEY": t };
+  return {};
+}
+
+function makeTronWeb(): any {
+  const opts: Record<string, any> = {
+    fullHost: TRONGRID_HOST,
+    privateKey: process.env.HOT_PRIVATE_KEY ?? "0000000000000000000000000000000000000000000000000000000000000001",
+  };
+  const hdrs = getTronHeaders();
+  if (Object.keys(hdrs).length > 0) opts.headers = hdrs;
+  return new TronWeb(opts);
+}
 
 export interface RateResult {
   base: number;
@@ -18,17 +41,10 @@ async function getHotWalletBalance(): Promise<number> {
   if (!hotWallet) return 0;
 
   try {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (process.env.TRON_API) headers["TRON-PRO-API-KEY"] = process.env.TRON_API;
-
-    const res = await axios.get(`${TRONGRID_BASE}/v1/accounts/${hotWallet}`, {
-      headers,
-      timeout: 8000,
-    });
-
-    const trc20: Array<{ key: string; value: string }> = res.data?.data?.[0]?.trc20 ?? [];
-    const usdt = trc20.find((t) => t.key === USDT_CONTRACT);
-    return usdt ? parseInt(usdt.value, 10) / 1e6 : 0;
+    const tw = makeTronWeb();
+    const contract = tw.contract(TRC20_ABI, USDT_CONTRACT);
+    const raw = await contract.balanceOf(hotWallet).call();
+    return parseInt(raw.toString(), 10) / 1e6;
   } catch (err) {
     logger.warn({ err }, "Failed to fetch hot wallet balance");
     return 0;
