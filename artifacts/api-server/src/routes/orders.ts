@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
+import { requireAuth } from "../lib/auth-middleware";
 
 const router: IRouter = Router();
 
@@ -35,7 +36,7 @@ router.get("/quote", (req, res) => {
   });
 });
 
-router.post("/orders", async (req, res) => {
+router.post("/orders", requireAuth, async (req, res) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
@@ -49,7 +50,7 @@ router.post("/orders", async (req, res) => {
 
   const [order] = await db
     .insert(ordersTable)
-    .values({ phone, network, status: "waiting" })
+    .values({ phone, network, status: "waiting", userId: req.session.userId })
     .returning();
 
   res.status(201).json({
@@ -60,12 +61,25 @@ router.post("/orders", async (req, res) => {
   });
 });
 
+// Admin view — all recent orders (no auth required for dashboard stats)
 router.get("/orders/recent", async (_req, res) => {
   const orders = await db
     .select()
     .from(ordersTable)
     .orderBy(desc(ordersTable.createdAt))
     .limit(20);
+
+  res.json(orders);
+});
+
+// User's own orders
+router.get("/orders/mine", requireAuth, async (req, res) => {
+  const orders = await db
+    .select()
+    .from(ordersTable)
+    .where(eq(ordersTable.userId, req.session.userId!))
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(50);
 
   res.json(orders);
 });
