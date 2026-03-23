@@ -1,7 +1,7 @@
 import axios from "axios";
 import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { logger } from "./logger";
 import { encrypt, decrypt } from "./encryption";
 import { getDynamicRate } from "./dynamicRate";
@@ -29,6 +29,35 @@ export async function createDepositAccount(): Promise<{ address: string; encrypt
   const address: string = account.address.base58;
   const encryptedPk = encrypt(account.privateKey);
   return { address, encryptedPk };
+}
+
+// =====================
+// 💰 FLUTTERWAVE BALANCE
+// =====================
+
+let cachedFlwBalance: { ugx: number; fetchedAt: number } | null = null;
+const FLW_BALANCE_TTL_MS = 30_000;
+
+export async function getFlutterwaveUgxBalance(): Promise<number> {
+  if (cachedFlwBalance && Date.now() - cachedFlwBalance.fetchedAt < FLW_BALANCE_TTL_MS) {
+    return cachedFlwBalance.ugx;
+  }
+  try {
+    const res = await axios.get("https://api.flutterwave.com/v3/balances/UGX", {
+      headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` },
+      timeout: 8000,
+    });
+    const ugx: number = res.data?.data?.available_balance ?? 0;
+    cachedFlwBalance = { ugx, fetchedAt: Date.now() };
+    return ugx;
+  } catch (err) {
+    logger.warn({ err }, "Could not fetch Flutterwave balance");
+    return cachedFlwBalance?.ugx ?? 0;
+  }
+}
+
+export function invalidateFlwBalanceCache() {
+  cachedFlwBalance = null;
 }
 
 // =====================
@@ -241,12 +270,41 @@ async function rebalance(): Promise<void> {
 }
 
 // =====================
+// ⏰ AUTO-EXPIRE
+// =====================
+
+async function expireStaleOrders(): Promise<void> {
+  try {
+    const now = new Date();
+    const expired = await db
+      .update(ordersTable)
+      .set({ status: "expired", updatedAt: now })
+      .where(
+        and(
+          eq(ordersTable.status, "waiting"),
+          lt(ordersTable.expiresAt, now),
+        ),
+      )
+      .returning({ id: ordersTable.id });
+
+    if (expired.length > 0) {
+      logger.info({ count: expired.length, ids: expired.map((o) => o.id) }, "Orders auto-expired");
+      invalidateFlwBalanceCache();
+    }
+  } catch (err) {
+    logger.warn({ err }, "Error expiring stale orders");
+  }
+}
+
+// =====================
 // 🚀 START
 // =====================
 
 export function startWalletWatcher() {
-  logger.info("MBIO wallet watcher started (per-order polling every 15s, rebalance every 60s)");
+  logger.info("MBIO wallet watcher started (per-order polling every 15s, rebalance every 60s, expiry every 60s)");
   watchOrders();
+  expireStaleOrders();
   setInterval(watchOrders, 15000);
   setInterval(rebalance, 60000);
+  setInterval(expireStaleOrders, 60000);
 }

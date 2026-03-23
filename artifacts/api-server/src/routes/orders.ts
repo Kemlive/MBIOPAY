@@ -5,7 +5,9 @@ import { eq, desc, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../lib/auth-middleware";
 import { getDynamicRate } from "../lib/dynamicRate";
-import { createDepositAccount } from "../lib/walletWatcher";
+import { createDepositAccount, getFlutterwaveUgxBalance } from "../lib/walletWatcher";
+
+const ORDER_TTL_MINUTES = 30;
 
 const router: IRouter = Router();
 
@@ -37,6 +39,25 @@ function cleanupOldKeys() {
     if (ts < cutoff) recentIdempotencyKeys.delete(key);
   }
 }
+
+router.get("/service-status", async (_req, res) => {
+  try {
+    const { finalRate } = await getDynamicRate();
+    const minOrderUgx = Math.floor(MIN_TX_AMOUNT * finalRate * (1 - FEE_PERCENT));
+    const balance = await getFlutterwaveUgxBalance();
+    const available = balance >= minOrderUgx;
+
+    res.json({
+      available,
+      ugxBalance: balance,
+      reason: available
+        ? undefined
+        : "Payouts temporarily unavailable. Please try again later.",
+    });
+  } catch {
+    res.json({ available: false, reason: "Service status check failed. Please try again later." });
+  }
+});
 
 router.get("/quote", async (req, res) => {
   const amount = parseFloat(req.query.amount as string);
@@ -108,6 +129,14 @@ router.post("/orders", requireAuth, async (req, res) => {
   const netUsdt = expectedUsdt - fee;
   const payoutUGX = Math.floor(netUsdt * finalRate);
 
+  const flwBalance = await getFlutterwaveUgxBalance();
+  if (flwBalance < payoutUGX) {
+    res.status(503).json({
+      error: "Payouts are temporarily unavailable due to insufficient funds. Please try again later.",
+    });
+    return;
+  }
+
   let depositAddress: string;
   let encryptedPk: string;
 
@@ -120,6 +149,8 @@ router.post("/orders", requireAuth, async (req, res) => {
     encryptedPk = "";
   }
 
+  const expiresAt = new Date(Date.now() + ORDER_TTL_MINUTES * 60 * 1000);
+
   const [order] = await db
     .insert(ordersTable)
     .values({
@@ -130,6 +161,7 @@ router.post("/orders", requireAuth, async (req, res) => {
       amount: expectedUsdt,
       depositAddress,
       encryptedPk,
+      expiresAt,
     })
     .returning();
 
@@ -139,6 +171,7 @@ router.post("/orders", requireAuth, async (req, res) => {
     expectedUsdt,
     payoutUGX,
     rate: finalRate,
+    expiresAt: expiresAt.toISOString(),
     message: `Send exactly ${expectedUsdt} USDT (TRC-20) to the address above. Your payout of ${payoutUGX.toLocaleString()} UGX will be sent to ${phone} on ${network}.`,
   });
 });
@@ -154,6 +187,7 @@ router.get("/orders/mine", requireAuth, async (req, res) => {
       status: ordersTable.status,
       txid: ordersTable.txid,
       depositAddress: ordersTable.depositAddress,
+      expiresAt: ordersTable.expiresAt,
       createdAt: ordersTable.createdAt,
       updatedAt: ordersTable.updatedAt,
     })
@@ -176,6 +210,7 @@ router.get("/orders/recent", requireAuth, async (req, res) => {
       status: ordersTable.status,
       txid: ordersTable.txid,
       depositAddress: ordersTable.depositAddress,
+      expiresAt: ordersTable.expiresAt,
       createdAt: ordersTable.createdAt,
       updatedAt: ordersTable.updatedAt,
     })
@@ -205,6 +240,7 @@ router.get("/orders/:id", requireAuth, async (req, res) => {
       status: ordersTable.status,
       txid: ordersTable.txid,
       depositAddress: ordersTable.depositAddress,
+      expiresAt: ordersTable.expiresAt,
       createdAt: ordersTable.createdAt,
       updatedAt: ordersTable.updatedAt,
     })

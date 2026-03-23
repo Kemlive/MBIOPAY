@@ -13,6 +13,7 @@ export const ordersTable = pgTable("orders", {
   txid: text("txid"),
   depositAddress: text("deposit_address"),
   encryptedPk: text("encrypted_pk"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

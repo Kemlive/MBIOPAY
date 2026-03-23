@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Activity, ArrowUpRight, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Activity, ArrowUpRight, CheckCircle2, Clock, XCircle, TimerOff } from "lucide-react";
 import { useGetRecentOrders } from "@workspace/api-client-react";
 import { formatPhone } from "@/lib/utils";
 
@@ -36,7 +36,8 @@ export function RecentOrders() {
         {orders.map((order) => {
           const isCompleted = order.status === "completed";
           const isFailed = order.status === "failed";
-          
+          const isExpired = order.status === "expired";
+
           return (
             <div 
               key={order.id} 
@@ -46,10 +47,12 @@ export function RecentOrders() {
                 <div className={`p-2 rounded-full ${
                   isCompleted ? "bg-primary/20 text-primary" : 
                   isFailed ? "bg-destructive/20 text-destructive" : 
+                  isExpired ? "bg-secondary text-muted-foreground" :
                   "bg-warning/20 text-warning"
                 }`}>
                   {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : 
                    isFailed ? <XCircle className="w-5 h-5" /> : 
+                   isExpired ? <TimerOff className="w-5 h-5" /> :
                    <Clock className="w-5 h-5" />}
                 </div>
                 

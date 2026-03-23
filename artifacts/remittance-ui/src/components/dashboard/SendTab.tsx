@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCreateOrder, useGetOrder, useGetQuote, useGetWalletAddress } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { QRCodeDisplay } from "@/components/ui/qr-code-display";
 import {
   Copy, CheckCircle2, Phone, ArrowRight, Loader2, SmartphoneNfc,
   Landmark, AlertCircle, ArrowLeft, RefreshCw, Banknote, Percent,
+  Clock, WifiOff, TimerOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 type Network = "MTN" | "Airtel";
 type Step = 1 | 2 | 3;
@@ -19,6 +20,44 @@ const slideVariants = {
   center: { opacity: 1, x: 0 },
   exit: (dir: number) => ({ opacity: 0, x: dir > 0 ? -40 : 40 }),
 };
+
+function useCountdown(expiresAt: string | null) {
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!expiresAt) return;
+
+    const update = () => {
+      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      setSecondsLeft(diff);
+    };
+
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [expiresAt]);
+
+  return secondsLeft;
+}
+
+function CountdownBadge({ secondsLeft }: { secondsLeft: number }) {
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const isUrgent = secondsLeft <= 5 * 60;
+
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-bold ${
+      secondsLeft === 0
+        ? "bg-destructive/20 text-destructive"
+        : isUrgent
+        ? "bg-orange-500/15 text-orange-400 animate-pulse"
+        : "bg-secondary text-muted-foreground"
+    }`}>
+      <Clock className="w-3.5 h-3.5" />
+      {secondsLeft === 0 ? "Expired" : `${mins}:${secs.toString().padStart(2, "0")} remaining`}
+    </div>
+  );
+}
 
 export function SendTab() {
   const [step, setStep] = useState<Step>(1);
@@ -31,6 +70,11 @@ export function SendTab() {
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [depositAddress, setDepositAddress] = useState("");
   const [copied, setCopied] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+
+  const [serviceAvailable, setServiceAvailable] = useState<boolean | null>(null);
+  const [serviceReason, setServiceReason] = useState("");
+  const serviceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const parsedAmount = parseFloat(usdtAmount) || 0;
   const [debouncedAmount, setDebouncedAmount] = useState(0);
@@ -39,6 +83,25 @@ export function SendTab() {
     const t = setTimeout(() => setDebouncedAmount(parsedAmount), 600);
     return () => clearTimeout(t);
   }, [parsedAmount]);
+
+  const checkServiceStatus = async () => {
+    try {
+      const data = await apiFetch("/api/service-status");
+      setServiceAvailable(data.available);
+      setServiceReason(data.reason ?? "");
+    } catch {
+      setServiceAvailable(false);
+      setServiceReason("Could not reach service. Please check your connection.");
+    }
+  };
+
+  useEffect(() => {
+    checkServiceStatus();
+    serviceCheckRef.current = setInterval(checkServiceStatus, 30000);
+    return () => {
+      if (serviceCheckRef.current) clearInterval(serviceCheckRef.current);
+    };
+  }, []);
 
   const { data: walletData } = useGetWalletAddress();
 
@@ -59,11 +122,13 @@ export function SendTab() {
       enabled: step === 3 && !!activeOrderId,
       refetchInterval: (q) => {
         const s = q.state?.data?.status;
-        if (s === "completed" || s === "failed") return false;
+        if (s === "completed" || s === "failed" || s === "expired") return false;
         return 5000;
       },
     },
   });
+
+  const secondsLeft = useCountdown(expiresAt);
 
   const goTo = (next: Step, direction = 1) => {
     setDir(direction);
@@ -96,6 +161,7 @@ export function SendTab() {
         onSuccess: (res) => {
           setActiveOrderId(res.orderId);
           setDepositAddress(res.address || walletData?.address || "");
+          setExpiresAt((res as any).expiresAt ?? null);
           goTo(3);
         },
       }
@@ -116,10 +182,13 @@ export function SendTab() {
     setAmountError("");
     setActiveOrderId(null);
     setDepositAddress("");
+    setExpiresAt(null);
     goTo(1, -1);
+    checkServiceStatus();
   };
 
   const address = depositAddress || walletData?.address || "";
+  const isExpired = order?.status === "expired" || (secondsLeft !== null && secondsLeft === 0 && order?.status === "waiting");
 
   return (
     <div className="max-w-xl mx-auto">
@@ -163,6 +232,20 @@ export function SendTab() {
                 <CardDescription>Enter recipient details and the amount to send.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
+
+                {/* Service unavailability banner */}
+                {serviceAvailable === false && (
+                  <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/25 rounded-xl px-4 py-3 text-sm">
+                    <WifiOff className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-destructive">Payouts unavailable</p>
+                      <p className="text-destructive/80 text-xs mt-0.5">
+                        {serviceReason || "The payout service is temporarily offline."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Network selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Mobile Network</label>
@@ -246,10 +329,13 @@ export function SendTab() {
                 <Button
                   className="w-full text-lg h-14"
                   onClick={handleGetQuote}
-                  disabled={quoteFetching}
+                  disabled={quoteFetching || serviceAvailable === false}
+                  title={serviceAvailable === false ? serviceReason : undefined}
                 >
                   {quoteFetching ? (
                     <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Getting Quote...</>
+                  ) : serviceAvailable === false ? (
+                    <><WifiOff className="mr-2 h-5 w-5" /> Service Unavailable</>
                   ) : (
                     <>Get Quote <ArrowRight className="ml-2 h-5 w-5" /></>
                   )}
@@ -314,6 +400,11 @@ export function SendTab() {
                   </div>
                 </div>
 
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/30 border border-border/40 rounded-xl px-4 py-3">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  You'll have <span className="font-semibold text-foreground mx-1">30 minutes</span> to send the USDT once the order is created.
+                </div>
+
                 <Button
                   className="w-full text-lg h-14"
                   onClick={handleConfirm}
@@ -372,11 +463,16 @@ export function SendTab() {
 
               <CardContent className="p-6 space-y-6">
                 {/* Waiting — show payment instructions */}
-                {(!order || order.status === "waiting") && (
+                {(!order || order.status === "waiting") && !isExpired && (
                   <div className="flex flex-col items-center space-y-4">
-                    <div className="inline-flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-full font-medium text-sm">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Waiting for your payment...
+                    <div className="flex items-center gap-3">
+                      <div className="inline-flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-full font-medium text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Waiting for your payment...
+                      </div>
+                      {secondsLeft !== null && expiresAt && (
+                        <CountdownBadge secondsLeft={secondsLeft} />
+                      )}
                     </div>
 
                     <p className="text-sm text-center text-muted-foreground">
@@ -392,6 +488,28 @@ export function SendTab() {
                         {copied ? "Copied" : "Copy"}
                       </Button>
                     </div>
+
+                    {secondsLeft !== null && secondsLeft <= 5 * 60 && secondsLeft > 0 && (
+                      <p className="text-xs text-orange-400 text-center">
+                        Hurry! This order expires soon. Send your USDT now.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Expired */}
+                {(order?.status === "expired" || isExpired) && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
+                    <div className="bg-secondary/50 border border-border/50 p-5 rounded-full">
+                      <TimerOff className="h-12 w-12 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-2xl font-display font-bold text-foreground">Order Expired</h3>
+                    <p className="text-muted-foreground text-sm max-w-xs">
+                      This order's 30-minute window has passed. No payment was detected, so no funds were moved.
+                    </p>
+                    <Button onClick={reset} variant="outline" className="w-full" size="lg">
+                      Start New Transfer
+                    </Button>
                   </div>
                 )}
 
