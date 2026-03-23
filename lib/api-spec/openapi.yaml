@@ -2,17 +2,14 @@ openapi: 3.1.0
 info:
   title: Api
   version: 0.1.0
-  description: Crypto to Mobile Money Remittance API
+  description: MBIO PAY — Crypto to Mobile Money Remittance API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
   - name: wallet
-    description: Wallet and balance operations
   - name: orders
-    description: Remittance order operations
 paths:
   /healthz:
     get:
@@ -26,6 +23,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /quote:
+    get:
+      operationId: getQuote
+      tags: [orders]
+      summary: Get UGX payout quote for a USDT amount
+      parameters:
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Amount in USDT
+      responses:
+        "200":
+          description: Quote details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
 
   /wallet/address:
     get:
@@ -140,6 +157,19 @@ components:
           type: string
       required: [status]
 
+    QuoteResponse:
+      type: object
+      properties:
+        usdtAmount:
+          type: number
+        payoutUGX:
+          type: number
+        usdtRate:
+          type: number
+        fee:
+          type: number
+      required: [usdtAmount, payoutUGX, usdtRate, fee]
+
     WalletAddressResponse:
       type: object
       properties:
@@ -154,13 +184,10 @@ components:
       properties:
         usdtBalance:
           type: number
-          description: USDT balance on the wallet
         ugxEquivalent:
           type: number
-          description: UGX equivalent of USDT balance
         usdtRate:
           type: number
-          description: Current USDT to UGX rate
         address:
           type: string
       required: [usdtBalance, ugxEquivalent, usdtRate, address]
@@ -188,7 +215,10 @@ components:
         network:
           type: string
           enum: [MTN, Airtel]
-      required: [phone, network]
+        expectedUsdt:
+          type: number
+          description: USDT amount the user expects to send
+      required: [phone, network, expectedUsdt]
 
     CreateOrderResponse:
       type: object
@@ -199,7 +229,9 @@ components:
           type: string
         message:
           type: string
-      required: [orderId, address, message]
+        payoutUGX:
+          type: number
+      required: [orderId, address, message, payoutUGX]
 
     Order:
       type: object

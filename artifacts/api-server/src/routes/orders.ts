@@ -6,9 +6,33 @@ import { z } from "zod";
 
 const router: IRouter = Router();
 
+const UGX_RATE = 3700;
+const FEE_PERCENT = 0.01; // 1% fee
+
 const CreateOrderSchema = z.object({
   phone: z.string().min(5, "Phone number is required"),
   network: z.enum(["MTN", "Airtel"]),
+  expectedUsdt: z.number().positive("USDT amount must be positive"),
+});
+
+router.get("/quote", (req, res) => {
+  const amount = parseFloat(req.query.amount as string);
+
+  if (isNaN(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid amount" });
+    return;
+  }
+
+  const fee = amount * FEE_PERCENT;
+  const netUsdt = amount - fee;
+  const payoutUGX = Math.floor(netUsdt * UGX_RATE);
+
+  res.json({
+    usdtAmount: amount,
+    payoutUGX,
+    usdtRate: UGX_RATE,
+    fee: parseFloat(fee.toFixed(6)),
+  });
 });
 
 router.post("/orders", async (req, res) => {
@@ -18,7 +42,10 @@ router.post("/orders", async (req, res) => {
     return;
   }
 
-  const { phone, network } = parsed.data;
+  const { phone, network, expectedUsdt } = parsed.data;
+  const fee = expectedUsdt * FEE_PERCENT;
+  const netUsdt = expectedUsdt - fee;
+  const payoutUGX = Math.floor(netUsdt * UGX_RATE);
 
   const [order] = await db
     .insert(ordersTable)
@@ -28,7 +55,8 @@ router.post("/orders", async (req, res) => {
   res.status(201).json({
     orderId: order.id,
     address: process.env.WALLET_ADDRESS,
-    message: `Send USDT (TRC-20) to the address above. Your UGX payout will be sent to ${phone} on ${network} once the transaction is confirmed.`,
+    message: `Send exactly ${expectedUsdt} USDT (TRC-20) to the address above. Your payout of ${payoutUGX.toLocaleString()} UGX will be sent to ${phone} on ${network}.`,
+    payoutUGX,
   });
 });
 
@@ -60,13 +88,6 @@ router.get("/orders/:id", async (req, res) => {
   }
 
   res.json(order);
-});
-
-router.get("/wallet/address", (_req, res) => {
-  res.json({
-    address: process.env.WALLET_ADDRESS ?? "",
-    network: "TRC-20 (TRON)",
-  });
 });
 
 export default router;

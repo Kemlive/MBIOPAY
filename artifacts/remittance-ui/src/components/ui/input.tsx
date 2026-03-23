@@ -1,33 +1,23 @@
-import * as React from "react";
-import { cn } from "@/lib/utils";
+import * as React from "react"
+import { cn } from "@/lib/utils"
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  icon?: React.ReactNode;
-}
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, icon, ...props }, ref) => {
+  ({ className, type, ...props }, ref) => {
     return (
-      <div className="relative w-full">
-        {icon && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-            {icon}
-          </div>
+      <input
+        type={type}
+        className={cn(
+          "flex h-14 w-full rounded-xl border border-border bg-input/50 px-4 py-2 text-base shadow-inner transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50",
+          className
         )}
-        <input
-          type={type}
-          className={cn(
-            "flex h-12 w-full rounded-xl border border-border bg-input/50 px-4 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200",
-            icon && "pl-11",
-            className
-          )}
-          ref={ref}
-          {...props}
-        />
-      </div>
-    );
+        ref={ref}
+        {...props}
+      />
+    )
   }
-);
-Input.displayName = "Input";
+)
+Input.displayName = "Input"
 
-export { Input };
+export { Input }
