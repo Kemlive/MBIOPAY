@@ -74,42 +74,32 @@ router.get("/resolve-account", requireAuth, async (req, res) => {
 
     const data = response.data?.data;
     if (!data?.account_name) {
-      res.status(422).json({ error: "Could not retrieve account name for this number" });
+      // Soft failure — verified=false lets the frontend skip the name badge without error
+      res.json({ accountName: null, verified: false, network });
       return;
     }
 
     res.json({
       accountName: data.account_name as string,
       accountNumber: (data.account_number as string) ?? phone,
+      verified: true,
       network,
     });
   } catch (err: unknown) {
-    const msg = axios.isAxiosError(err)
-      ? (err.response?.data?.message ?? err.message)
-      : "Name lookup failed";
-    res.status(502).json({ error: msg });
+    // Soft failure — test mode or unsupported numbers just skip name verification
+    logger.warn({ err, phone, network }, "Account name resolve failed — returning unverified");
+    res.json({ accountName: null, verified: false, network });
   }
 });
 
 router.get("/service-status", async (_req, res) => {
   try {
     const { finalRate } = await getDynamicRate();
-    const minOrderUgx = Math.floor(MIN_TX_AMOUNT * finalRate * (1 - FEE_PERCENT));
+    // Service is available as long as rate can be computed.
+    // UGX balance is fetched for informational purposes only — never used to gate service.
     const balance = await getFlutterwaveUgxBalance();
-
-    // null means the balance check failed (API error) — treat as available (optimistic)
-    // Only block when we have a confirmed balance that is too low
-    const confirmedInsufficient = balance !== null && balance < minOrderUgx;
-
-    res.json({
-      available: !confirmedInsufficient,
-      ugxBalance: balance,
-      reason: confirmedInsufficient
-        ? "Payouts temporarily unavailable. Please try again later."
-        : undefined,
-    });
+    res.json({ available: true, ugxBalance: balance });
   } catch {
-    // On unexpected errors, stay optimistic — don't block users
     res.json({ available: true });
   }
 });

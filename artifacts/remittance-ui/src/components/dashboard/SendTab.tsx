@@ -88,12 +88,18 @@ export function SendTab() {
         const data = await apiFetch(
           `/api/resolve-account?phone=${encodeURIComponent(phone)}&network=${encodeURIComponent(network)}`
         );
-        setResolvedName(data.accountName ?? null);
-        setNameResolveFailed(false);
-      } catch (err: any) {
+        // verified=false means the lookup is unsupported (e.g. test mode) — not an error
+        if (data.verified && data.accountName) {
+          setResolvedName(data.accountName);
+          setNameResolveFailed(false);
+        } else {
+          setResolvedName(null);
+          setNameResolveFailed(false); // silent — don't alarm users for unverified
+        }
+      } catch {
+        // Network error — silently skip, don't block or alarm
         setResolvedName(null);
-        setNameResolveFailed(true);
-        setNameResolveError(err.message ?? "Name lookup failed");
+        setNameResolveFailed(false);
       } finally {
         setResolvingName(false);
       }
