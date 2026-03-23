@@ -133,6 +133,10 @@ router.get("/auth/me", async (req, res) => {
     uid: user.uid,
     email: user.email,
     username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    usernameSet: user.usernameSet,
+    createdAt: user.createdAt,
   });
 });
 

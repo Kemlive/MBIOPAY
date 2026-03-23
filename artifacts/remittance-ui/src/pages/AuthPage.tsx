@@ -38,12 +38,9 @@ export default function AuthPage() {
         <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-primary flex items-center justify-center shadow-lg shadow-primary/30">
           <ArrowLeftRight className="h-6 w-6 text-white" />
         </div>
-        <div>
-          <div className="flex items-baseline gap-1">
-            <span className="font-display text-2xl font-bold text-foreground">MBIO</span>
-            <span className="font-display text-2xl font-bold text-primary">PAY</span>
-          </div>
-          <p className="text-muted-foreground text-xs">Money home in minutes</p>
+        <div className="flex items-baseline gap-1">
+          <span className="font-display text-2xl font-bold text-foreground">MBIO</span>
+          <span className="font-display text-2xl font-bold text-primary">PAY</span>
         </div>
       </div>
 

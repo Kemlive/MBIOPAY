@@ -37,9 +37,6 @@ export default function Home() {
               <span className="font-display text-xl font-bold tracking-tight text-foreground">MBIO</span>
               <span className="font-display text-xl font-bold tracking-tight text-primary ml-1">PAY</span>
             </div>
-            <span className="hidden sm:block text-muted-foreground text-xs border-l border-border pl-3">
-              Money home in minutes
-            </span>
           </div>
 
           {/* Right: desktop nav + avatar */}
