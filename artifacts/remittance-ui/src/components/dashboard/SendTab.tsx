@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCreateOrder, useGetOrder, useGetQuote, useGetWalletAddress } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,19 @@ export function SendTab() {
   const [copied, setCopied] = useState(false);
 
   const parsedAmount = parseFloat(usdtAmount) || 0;
+  const [debouncedAmount, setDebouncedAmount] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedAmount(parsedAmount), 600);
+    return () => clearTimeout(t);
+  }, [parsedAmount]);
 
   const { data: walletData } = useGetWalletAddress();
+
+  const { data: liveQuote } = useGetQuote(
+    { amount: debouncedAmount },
+    { query: { enabled: debouncedAmount >= 1 && debouncedAmount <= 500, staleTime: 30000 } }
+  );
 
   const { data: quote, isFetching: quoteFetching, refetch: fetchQuote } = useGetQuote(
     { amount: parsedAmount },
@@ -224,7 +235,10 @@ export function SendTab() {
                   {amountError && <p className="text-xs text-destructive">{amountError}</p>}
                   {parsedAmount > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      ≈ {formatCurrency(Math.floor((parsedAmount * 0.99) * 3700))} UGX after 1% fee
+                      {liveQuote
+                        ? <>≈ <span className="text-foreground font-medium">{formatCurrency(liveQuote.payoutUGX)}</span> UGX &nbsp;·&nbsp; rate: {liveQuote.usdtRate.toLocaleString()} UGX/USDT</>
+                        : "Fetching live rate…"
+                      }
                     </p>
                   )}
                 </div>

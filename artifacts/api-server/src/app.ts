@@ -9,7 +9,6 @@ import { createHash } from "crypto";
 
 const app: Express = express();
 
-// Trust the Replit proxy so rate limiter sees real client IPs
 app.set("trust proxy", 1);
 
 app.use(
@@ -24,20 +23,63 @@ app.use(
         };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
 );
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
+function buildAllowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+
+  const replitDomains = process.env.REPLIT_DOMAINS?.split(",") ?? [];
+  replitDomains.forEach((d) => origins.add(`https://${d.trim()}`));
+
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    origins.add("http://localhost:3000");
+    origins.add("http://localhost:5173");
+    origins.add("http://localhost:21568");
+  }
+
+  return origins;
+}
+
+const allowedOrigins = buildAllowedOrigins();
 
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 
@@ -62,8 +104,9 @@ const loginLimiter = rateLimit({
   },
 });
 
-app.use(express.json({ limit: "4mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use("/api/profile", express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "50kb" }));
+app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 
 app.use("/api", globalLimiter);
 app.use("/api/auth/login", loginLimiter);

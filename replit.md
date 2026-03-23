@@ -1,8 +1,8 @@
-# Crypto Remittance — USDT → UGX Mobile Money
+# MBIO PAY — USDT (TRC-20) → UGX Mobile Money Remittance
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+pnpm workspace monorepo using TypeScript. Converts USDT on the TRON network to UGX mobile money (MTN/Airtel Uganda) via Flutterwave.
 
 ## Stack
 
@@ -14,83 +14,99 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build**: esbuild (ESM bundle)
+- **TRON**: tronweb (externalized from bundle, CJS via `require("tronweb")`)
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
+├── artifacts/
+│   ├── api-server/         # Express API server
+│   └── remittance-ui/      # React + Vite frontend
+├── lib/
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── scripts/                # Utility scripts
+└── pnpm-workspace.yaml
 ```
+
+## Database Schema
+
+- **users** — email, username (unique, one-time change), passwordHash, avatarUrl (base64), failedAttempts, lockedUntil
+- **refresh_tokens** — hashed refresh tokens per user (revocable, 7d TTL, token rotation)
+- **orders** — per-order TRON deposit addresses (encrypted PK), phone, network, amount, ugxAmount, status, txid
+- `encryptedPk` is AES-256-CBC encrypted with `ENCRYPTION_KEY` env var; never returned in API responses
+
+## Auth System
+
+- JWT — access token 15min (`JWT_SECRET`), refresh token 7d (`REFRESH_SECRET`)
+- Refresh tokens stored as SHA-256 hashes in `refresh_tokens` table — fully revocable
+- Token rotation: each `/auth/refresh` issues a new refresh token, old one deleted
+- Logout revokes all refresh tokens for the user in DB
+- Account lockout: 10 failed login attempts → 15-minute lock, reset on success
+- Frontend: `localStorage` (`mbio_access`, `mbio_refresh`); auto-refreshes on 401
+- Logout sends refresh token to server for DB revocation
+
+## Backend Security
+
+- `helmet` with CSP, HSTS (1yr), referrer policy
+- CORS locked to `REPLIT_DOMAINS` / `REPLIT_DEV_DOMAIN`; localhost in dev only
+- Rate limiting: 120 req/min global, 10 req/min on login/signup (per IP+UA fingerprint)
+- Body limit: 50KB global; 4MB only on `PATCH /api/profile` (avatar upload)
+- `trust proxy: 1` for Replit reverse proxy
+- MAX_TX_AMOUNT: 500 USDT; TRADE_LIMIT_PER_MIN: 10 orders/min per user
+- Per-order unique TRON deposit addresses — exact payment matching, no shared wallet ambiguity
+- Sweep retry: 3 attempts with 30s/60s/90s backoff; failure logged for manual recovery
+- Phone validation (Uganda `256XXXXXXXXX`) enforced on backend
+- `/orders/:id` and `/orders/recent` require auth + ownership check
+- `encryptedPk` column excluded from all API responses via explicit column select
+
+## Wallet / Finance Architecture
+
+- **Dynamic rate engine**: base 3700 UGX/USDT, ±1–6% margin based on hot wallet balance + pending demand
+- **Per-order deposit wallets**: TronWeb creates fresh wallet per order; PK AES-encrypted in DB
+- **Sweep**: after deposit confirmed (3+ confirmations), funds swept to `HOT_WALLET`
+- **Rebalance**: every 60s — if hot wallet > `MAX_HOT_BALANCE` (5000 USDT), excess sent to `COLD_WALLET`; if < `MIN_HOT_BALANCE` (1000 USDT), alert logged
+- **Payout**: Flutterwave `/v3/transfers` to UGX mobile money (MTN=MPS, Airtel=AIN)
+
+## Required Secrets
+
+| Key | Purpose |
+|-----|---------|
+| `JWT_SECRET` | Sign access tokens |
+| `REFRESH_SECRET` | Sign refresh tokens |
+| `FLW_SECRET_KEY` | Flutterwave API key |
+| `ENCRYPTION_KEY` | AES-256 encrypt deposit wallet private keys |
+| `HOT_WALLET` | Operational TRON hot wallet address |
+| `HOT_PRIVATE_KEY` | Hot wallet private key (sweeps + payouts) |
+| `COLD_WALLET` | Cold storage address for excess funds |
+
+## Required Env Vars (non-secret)
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `USDT_CONTRACT` | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` | USDT TRC-20 contract (mainnet) |
+| `BASE_RATE` | `3700` | Base UGX per USDT |
+| `MIN_HOT_BALANCE` | `1000` | Minimum hot wallet USDT |
+| `MAX_HOT_BALANCE` | `5000` | Maximum before rebalancing to cold |
+| `MAX_TX_AMOUNT` | `500` | Per-order USDT cap |
+| `TRADE_LIMIT_PER_MIN` | `10` | Max orders per user per minute |
+
+## Important Notes
+
+- `tronweb` must be in `build.mjs` externals list (CJS, cannot be bundled by ESBuild)
+- Use `require("tronweb")` not ES `import` in walletWatcher.ts (CJS interop)
+- Zod imports: use `"zod"` (not `"zod/v4"`) in api-server routes
+- Avatar stored as base64 data URL (max 2MB), resized to 256px JPEG on client
+- Username: one-time change enforced via `usernameSet` boolean
+- `bcryptjs` (pure JS) — avoids native build issues with `bcrypt`
 
 ## TypeScript & Composite Projects
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+Every package extends `tsconfig.base.json` which sets `composite: true`. Always typecheck from root: `pnpm run typecheck`.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
-
-## Root Scripts
-
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- `emitDeclarationOnly` — only `.d.ts` files emitted during typecheck; JS bundling via esbuild/vite
+- When adding cross-package imports, add to `references` in that package's `tsconfig.json`

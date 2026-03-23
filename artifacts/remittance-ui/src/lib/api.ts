@@ -39,6 +39,9 @@ async function refreshAccessToken(): Promise<string | null> {
 
     const data = await res.json();
     localStorage.setItem(TOKEN_KEY, data.accessToken);
+    if (data.refreshToken) {
+      localStorage.setItem(REFRESH_KEY, data.refreshToken);
+    }
     return data.accessToken;
   } catch {
     clearTokens();
@@ -114,6 +117,10 @@ export async function signup(email: string, username: string, password: string):
 }
 
 export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken();
   clearTokens();
-  await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+  await apiFetch("/api/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+  }).catch(() => {});
 }

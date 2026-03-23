@@ -11,13 +11,22 @@ const router: IRouter = Router();
 
 const FEE_PERCENT = 0.01;
 const MAX_TX_AMOUNT = parseFloat(process.env.MAX_TX_AMOUNT ?? "500");
+const MIN_TX_AMOUNT = 1;
 const TRADE_LIMIT_PER_MIN = parseInt(process.env.TRADE_LIMIT_PER_MIN ?? "10", 10);
 
+const UGANDA_PHONE_RE = /^256\d{9}$/;
+
 const CreateOrderSchema = z.object({
-  phone: z.string().min(5, "Phone number is required"),
+  phone: z
+    .string()
+    .regex(UGANDA_PHONE_RE, "Invalid phone number. Use format: 256XXXXXXXXX (e.g. 256700000000)"),
   network: z.enum(["MTN", "Airtel"]),
-  expectedUsdt: z.number().positive("USDT amount must be positive"),
-  idempotencyKey: z.string().min(8, "Idempotency key required").optional(),
+  expectedUsdt: z
+    .number()
+    .positive("USDT amount must be positive")
+    .min(MIN_TX_AMOUNT, `Minimum amount is ${MIN_TX_AMOUNT} USDT`)
+    .max(MAX_TX_AMOUNT, `Maximum amount is ${MAX_TX_AMOUNT} USDT`),
+  idempotencyKey: z.string().min(8).max(64).optional(),
 });
 
 const recentIdempotencyKeys = new Map<string, number>();
@@ -32,8 +41,8 @@ function cleanupOldKeys() {
 router.get("/quote", async (req, res) => {
   const amount = parseFloat(req.query.amount as string);
 
-  if (isNaN(amount) || amount <= 0) {
-    res.status(400).json({ error: "Invalid amount" });
+  if (isNaN(amount) || amount < MIN_TX_AMOUNT) {
+    res.status(400).json({ error: `Minimum amount is ${MIN_TX_AMOUNT} USDT` });
     return;
   }
 
@@ -43,7 +52,6 @@ router.get("/quote", async (req, res) => {
   }
 
   const { finalRate, base, margin } = await getDynamicRate();
-
   const fee = amount * FEE_PERCENT;
   const netUsdt = amount - fee;
   const payoutUGX = Math.floor(netUsdt * finalRate);
@@ -66,11 +74,6 @@ router.post("/orders", requireAuth, async (req, res) => {
   }
 
   const { phone, network, expectedUsdt, idempotencyKey } = parsed.data;
-
-  if (expectedUsdt > MAX_TX_AMOUNT) {
-    res.status(400).json({ error: `Maximum transaction amount is ${MAX_TX_AMOUNT} USDT` });
-    return;
-  }
 
   if (idempotencyKey) {
     const iKey = `${req.user!.id}:${idempotencyKey}`;
@@ -140,19 +143,20 @@ router.post("/orders", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/orders/recent", async (_req, res) => {
-  const orders = await db
-    .select()
-    .from(ordersTable)
-    .orderBy(desc(ordersTable.createdAt))
-    .limit(20);
-
-  res.json(orders);
-});
-
 router.get("/orders/mine", requireAuth, async (req, res) => {
   const orders = await db
-    .select()
+    .select({
+      id: ordersTable.id,
+      phone: ordersTable.phone,
+      network: ordersTable.network,
+      amount: ordersTable.amount,
+      ugxAmount: ordersTable.ugxAmount,
+      status: ordersTable.status,
+      txid: ordersTable.txid,
+      depositAddress: ordersTable.depositAddress,
+      createdAt: ordersTable.createdAt,
+      updatedAt: ordersTable.updatedAt,
+    })
     .from(ordersTable)
     .where(eq(ordersTable.userId, req.user!.id))
     .orderBy(desc(ordersTable.createdAt))
@@ -161,7 +165,29 @@ router.get("/orders/mine", requireAuth, async (req, res) => {
   res.json(orders);
 });
 
-router.get("/orders/:id", async (req, res) => {
+router.get("/orders/recent", requireAuth, async (req, res) => {
+  const orders = await db
+    .select({
+      id: ordersTable.id,
+      phone: ordersTable.phone,
+      network: ordersTable.network,
+      amount: ordersTable.amount,
+      ugxAmount: ordersTable.ugxAmount,
+      status: ordersTable.status,
+      txid: ordersTable.txid,
+      depositAddress: ordersTable.depositAddress,
+      createdAt: ordersTable.createdAt,
+      updatedAt: ordersTable.updatedAt,
+    })
+    .from(ordersTable)
+    .where(eq(ordersTable.userId, req.user!.id))
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(20);
+
+  res.json(orders);
+});
+
+router.get("/orders/:id", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id ?? "", 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid order ID" });
@@ -169,7 +195,19 @@ router.get("/orders/:id", async (req, res) => {
   }
 
   const [order] = await db
-    .select()
+    .select({
+      id: ordersTable.id,
+      userId: ordersTable.userId,
+      phone: ordersTable.phone,
+      network: ordersTable.network,
+      amount: ordersTable.amount,
+      ugxAmount: ordersTable.ugxAmount,
+      status: ordersTable.status,
+      txid: ordersTable.txid,
+      depositAddress: ordersTable.depositAddress,
+      createdAt: ordersTable.createdAt,
+      updatedAt: ordersTable.updatedAt,
+    })
     .from(ordersTable)
     .where(eq(ordersTable.id, id));
 
@@ -178,8 +216,12 @@ router.get("/orders/:id", async (req, res) => {
     return;
   }
 
-  const safe = { ...order, encryptedPk: undefined };
-  res.json(safe);
+  if (order.userId !== req.user!.id) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  res.json(order);
 });
 
 export default router;

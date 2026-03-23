@@ -95,6 +95,31 @@ async function executePayout(orderId: number, phone: string, network: string, am
 }
 
 // =====================
+// 🔁 RETRY HELPER
+// =====================
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 30000,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * attempt;
+        logger.warn({ attempt, delay, err }, "Retrying after error");
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// =====================
 // 🔁 SWEEP
 // =====================
 
@@ -103,13 +128,15 @@ async function sweep(order: typeof ordersTable.$inferSelect, amount: number): Pr
   if (!hotWallet || !order.encryptedPk) return;
 
   try {
-    const pk = decrypt(order.encryptedPk);
-    const tw = getTronWeb(pk);
-    const contract = await tw.contract().at(USDT_CONTRACT);
-    await contract.transfer(hotWallet, Math.floor(amount * 1e6)).send();
+    await withRetry(async () => {
+      const pk = decrypt(order.encryptedPk!);
+      const tw = getTronWeb(pk);
+      const contract = await tw.contract().at(USDT_CONTRACT);
+      await contract.transfer(hotWallet, Math.floor(amount * 1e6)).send();
+    });
     logger.info({ orderId: order.id, amount }, "Swept to hot wallet");
   } catch (err) {
-    logger.error({ err, orderId: order.id }, "Sweep failed");
+    logger.error({ err, orderId: order.id }, "Sweep failed after 3 attempts — manual recovery needed");
   }
 }
 
