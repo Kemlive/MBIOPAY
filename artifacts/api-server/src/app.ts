@@ -1,12 +1,16 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { createHash } from "crypto";
 
 const app: Express = express();
+
+// Trust the Replit proxy so rate limiter sees real client IPs
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -52,10 +56,9 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many login attempts, try again in a minute." },
   keyGenerator: (req) => {
-    const ip = req.ip ?? "unknown";
+    const baseIp = ipKeyGenerator(req);
     const ua = req.headers["user-agent"] ?? "";
-    const crypto = require("crypto") as typeof import("crypto");
-    return crypto.createHash("sha256").update(ip + ua).digest("hex");
+    return createHash("sha256").update(baseIp + ua).digest("hex");
   },
 });
 
