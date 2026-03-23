@@ -18,8 +18,11 @@ async function getHotWalletBalance(): Promise<number> {
   if (!hotWallet) return 0;
 
   try {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (process.env.TRON_API) headers["TRON-PRO-API-KEY"] = process.env.TRON_API;
+
     const res = await axios.get(`${TRONGRID_BASE}/v1/accounts/${hotWallet}`, {
-      headers: { Accept: "application/json" },
+      headers,
       timeout: 8000,
     });
 

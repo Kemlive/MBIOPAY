@@ -17,10 +17,15 @@ const MIN_CONFIRMATIONS = 3;
 // =====================
 
 function getTronWeb(privateKey?: string): any {
-  return new TronWeb({
+  const tronApiKey = process.env.TRON_API;
+  const opts: Record<string, any> = {
     fullHost: TRONGRID_BASE,
     privateKey: privateKey ?? process.env.HOT_PRIVATE_KEY ?? "",
-  });
+  };
+  if (tronApiKey) {
+    opts.headers = { "TRON-PRO-API-KEY": tronApiKey };
+  }
+  return new TronWeb(opts);
 }
 
 export async function createDepositAccount(): Promise<{ address: string; encryptedPk: string }> {
@@ -191,11 +196,14 @@ async function watchOrders(): Promise<void> {
       if (!order.depositAddress) continue;
 
       try {
+        const tronHeaders: Record<string, string> = { Accept: "application/json" };
+        if (process.env.TRON_API) tronHeaders["TRON-PRO-API-KEY"] = process.env.TRON_API;
+
         const res = await axios.get(
           `${TRONGRID_BASE}/v1/accounts/${order.depositAddress}/transactions/trc20`,
           {
             params: { limit: 5, contract_address: USDT_CONTRACT, only_to: "true" },
-            headers: { Accept: "application/json" },
+            headers: tronHeaders,
             timeout: 12000,
           }
         );
