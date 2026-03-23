@@ -85,22 +85,32 @@ Runs on every order creation (`src/lib/fraudDetector.ts`). 7-layer check pipelin
 
 ## Admin Panel
 
-- URL: `/admin-panel?secret=ADMIN_SECRET` (served from the API server)
-- Protected by `ADMIN_SECRET` env var (header `x-admin-secret` or `?secret=` query)
-- Tabs: Overview (stats), Users (risk scores, freeze/unfreeze), Orders, Fraud Events, Blocklist
-- Actions: freeze/unfreeze user, reset risk score, block/unblock phone number
+- URL: `/api/admin-panel` (served from the API server, no secret in URL — session-based auth)
+- **Auth**: email + bcrypt password + TOTP (speakeasy) + device fingerprint (SHA-256 of UA+screen+language)
+- **First-time setup**: `/api/admin-panel` → "First-time Setup" tab → generates QR code → scan with authenticator app → register. Only works when no admin exists.
+- **Device binding**: first login binds device hash; new devices are rejected (admin must call `POST /api/admin/reset-device` with TOTP to clear)
+- **Session**: 4-hour httpOnly cookie (`mbio_admin_sid`), uses `ADMIN_SECRET` as session secret
+- Tabs: Overview, Users (risk scores, freeze/unfreeze), Orders, Fraud Events, Blocklist
 
-Admin API endpoints (all require `x-admin-secret` header):
-- `GET /admin/overview` — system stats
-- `GET /admin/users` — all users sorted by risk score
-- `GET /admin/orders` — last 200 orders
-- `GET /admin/fraud-events` — full fraud audit log
-- `GET /admin/blocklist` — blocked phones
-- `POST /admin/block-phone` — add phone to blocklist
-- `DELETE /admin/block-phone/:phone` — remove from blocklist
-- `POST /admin/freeze/:id` — freeze user account
-- `POST /admin/unfreeze/:id` — unfreeze user account
-- `POST /admin/reset-risk/:id` — reset risk score to 0
+Admin API endpoints (all require active admin session cookie):
+- `GET /api/admin/session` — check session status
+- `POST /api/admin/login` — email + password + TOTP token + device fingerprint
+- `POST /api/admin/logout` — destroy session
+- `GET /api/admin/setup-totp` — generate TOTP secret + QR code (registration only)
+- `POST /api/admin/register` — create admin account (only if none exist)
+- `POST /api/admin/reset-device` — clear device binding (requires TOTP)
+- `GET /api/admin/overview` — system stats
+- `GET /api/admin/users` — all users sorted by risk score
+- `GET /api/admin/orders` — last 200 orders
+- `GET /api/admin/fraud-events` — full fraud audit log
+- `GET /api/admin/blocklist` — blocked phones
+- `POST /api/admin/block-phone` — add phone to blocklist
+- `DELETE /api/admin/block-phone/:phone` — remove from blocklist
+- `POST /api/admin/freeze/:id` — freeze user account
+- `POST /api/admin/unfreeze/:id` — unfreeze user account
+- `POST /api/admin/reset-risk/:id` — reset risk score to 0
+
+Admin DB table: `admins` — email, password_hash (bcrypt), totp_secret, device_hash, is_active, last_login_at
 
 ## Wallet / Finance Architecture
 
