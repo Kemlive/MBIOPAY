@@ -15,7 +15,7 @@ function createTransport() {
   });
 }
 
-const FROM = process.env.SMTP_FROM ?? "MBIO PAY <noreply@mbiopay.com>";
+const FROM = process.env.SMTP_FROM ?? "MBIO Pay <noreply@mbiopay.com>";
 
 export async function sendVerificationEmail(email: string, code: string): Promise<void> {
   const html = `
@@ -42,11 +42,14 @@ export async function sendVerificationEmail(email: string, code: string): Promis
           <div style="background:#0d2d1a;border:2px solid #00c853;border-radius:12px;padding:20px;text-align:center;margin:0 0 28px;">
             <span style="font-size:36px;font-weight:700;letter-spacing:10px;color:#00c853;font-family:monospace;">${code}</span>
           </div>
-          <p style="color:#606070;font-size:12px;line-height:1.6;margin:0 0 16px;">
+          <p style="color:#606070;font-size:12px;line-height:1.6;margin:0 0 12px;">
             If you did not create an account on MBIO PAY, you can safely ignore this email.
           </p>
+          <p style="color:#a0a0b0;font-size:12px;line-height:1.6;margin:0 0 16px;background:#1a1a2e;border-left:3px solid #00c853;padding:10px 14px;border-radius:4px;">
+            MBIO Pay will never ask for this code outside the app.
+          </p>
           <div style="border-top:1px solid #1e1e2e;padding-top:16px;margin-top:8px;">
-            <p style="color:#404050;font-size:11px;margin:0;">© 2026 MBIO PAY · Secure crypto remittance</p>
+            <p style="color:#404050;font-size:11px;margin:0;">© 2026 MBIO PAY · Secure digital transfer service</p>
           </div>
         </td></tr>
       </table>

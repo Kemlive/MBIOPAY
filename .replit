@@ -36,7 +36,7 @@ MAX_HOT_BALANCE = "5000"
 BASE_RATE = "3700"
 SMTP_HOST = "mail.privateemail.com"
 SMTP_PORT = "587"
-SMTP_FROM = "MBIO PAY <noreply@mbiopay.com>"
+SMTP_FROM = "MBIO Pay <noreply@mbiopay.com>"
 
 [nix]
 channel = "stable-25_05"
