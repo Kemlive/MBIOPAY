@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import Home from "@/pages/Home";
 import AuthPage from "@/pages/AuthPage";
 import AdminPage from "@/pages/AdminPage";
+import TermsPage from "@/pages/TermsPage";
+import PrivacyPage from "@/pages/PrivacyPage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -20,9 +22,10 @@ function AppContent() {
   const { user, loading } = useAuth();
   const [location] = useLocation();
 
-  if (location === "/admin" || location.startsWith("/admin/")) {
-    return <AdminPage />;
-  }
+  // Public routes — no auth required
+  if (location === "/admin" || location.startsWith("/admin/")) return <AdminPage />;
+  if (location === "/terms") return <TermsPage />;
+  if (location === "/privacy") return <PrivacyPage />;
 
   if (loading) {
     return (
@@ -35,9 +38,7 @@ function AppContent() {
     );
   }
 
-  if (!user) {
-    return <AuthPage />;
-  }
+  if (!user) return <AuthPage />;
 
   return (
     <Switch>

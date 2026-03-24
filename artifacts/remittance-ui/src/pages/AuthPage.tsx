@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 
 type Mode = "login" | "signup";
@@ -164,6 +165,14 @@ export default function AuthPage() {
       <p className="text-muted-foreground text-xs mt-6">
         USDT (TRC-20) → UGX mobile money
       </p>
+
+      <div className="flex items-center gap-3 mt-4 text-xs text-muted-foreground/60">
+        <Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
+        <span>·</span>
+        <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+        <span>·</span>
+        <a href="tel:+12135105113" className="hover:text-primary transition-colors">Support</a>
+      </div>
     </div>
   );
 }
