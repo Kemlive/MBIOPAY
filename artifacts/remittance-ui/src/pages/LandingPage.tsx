@@ -422,6 +422,7 @@ export default function LandingPage() {
               <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
               <a href="tel:+12135105113" className="hover:text-primary transition-colors">+1 213-510-5113</a>
               <a href="mailto:support@mbiopay.com" className="hover:text-primary transition-colors">support@mbiopay.com</a>
+              <Link href="/admin" className="hover:text-primary transition-colors opacity-40 hover:opacity-100">Admin</Link>
             </div>
           </div>
 
