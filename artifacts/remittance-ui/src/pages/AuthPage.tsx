@@ -5,9 +5,17 @@ import { useAuth } from "@/lib/auth-context";
 
 type Mode = "login" | "signup";
 
+function getInitialMode(): Mode {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "signup") return "signup";
+  }
+  return "login";
+}
+
 export default function AuthPage() {
   const { login, signup, stage, pendingEmail, pendingTOTP, verifyEmail, resendVerification, resetStage } = useAuth();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(getInitialMode);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

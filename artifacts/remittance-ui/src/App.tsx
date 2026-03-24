@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import Home from "@/pages/Home";
+import LandingPage from "@/pages/LandingPage";
 import AuthPage from "@/pages/AuthPage";
 import AdminPage from "@/pages/AdminPage";
 import TermsPage from "@/pages/TermsPage";
@@ -22,7 +23,7 @@ function AppContent() {
   const { user, loading } = useAuth();
   const [location] = useLocation();
 
-  // Public routes — no auth required
+  // Always-public routes
   if (location === "/admin" || location.startsWith("/admin/")) return <AdminPage />;
   if (location === "/terms") return <TermsPage />;
   if (location === "/privacy") return <PrivacyPage />;
@@ -38,12 +39,23 @@ function AppContent() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  // Logged-in users always go to app
+  if (user) {
+    return (
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/auth" component={Home} />
+        <Route component={NotFound} />
+      </Switch>
+    );
+  }
 
+  // Non-authenticated routing
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route component={NotFound} />
+      <Route path="/" component={LandingPage} />
+      <Route path="/auth" component={AuthPage} />
+      <Route component={LandingPage} />
     </Switch>
   );
 }
