@@ -8,7 +8,7 @@ import { eq, and, gt, lt } from "drizzle-orm";
 import { signAccess, signRefresh, verifyRefresh } from "../lib/jwt";
 import { requireAuth } from "../lib/auth-middleware";
 import { isDisposableEmail } from "../lib/disposableEmails";
-import { sendVerificationEmail } from "../lib/emailService";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/emailService";
 import speakeasy from "speakeasy";
 
 const router = Router();
@@ -27,7 +27,11 @@ const SignupSchema = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(128, "Password too long"),
+    .max(128, "Password too long")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 
 const LoginSchema = z.object({
@@ -386,6 +390,84 @@ router.post("/auth/refresh", async (req, res) => {
   } catch {
     res.status(401).json({ error: "Invalid or expired refresh token" });
   }
+});
+
+// ─── POST /api/auth/forgot-password ──────────────────────────────────────────
+router.post("/auth/forgot-password", async (req, res) => {
+  const { email } = req.body as { email: string };
+  if (!email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, emailLower)).limit(1);
+
+  // Always return success to prevent user enumeration
+  if (!user || !user.emailVerified) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const token = randomUUID();
+  const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await db.update(usersTable)
+    .set({ passwordResetToken: token, passwordResetExpires: expires, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id));
+
+  await sendPasswordResetEmail(emailLower, token).catch(() => {});
+
+  res.json({ ok: true });
+});
+
+// ─── POST /api/auth/reset-password ───────────────────────────────────────────
+const ResetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password too long")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+});
+
+router.post("/auth/reset-password", async (req, res) => {
+  const parsed = ResetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const msg = parsed.error.errors[0]?.message ?? "Invalid request";
+    res.status(400).json({ error: msg });
+    return;
+  }
+
+  const { token, password } = parsed.data;
+
+  const [user] = await db.select().from(usersTable)
+    .where(eq(usersTable.passwordResetToken, token))
+    .limit(1);
+
+  if (!user || !user.passwordResetExpires) {
+    res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+    return;
+  }
+
+  if (user.passwordResetExpires < new Date()) {
+    res.status(400).json({ error: "This reset link has expired. Please request a new one." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  await db.update(usersTable)
+    .set({ passwordHash, passwordResetToken: null, passwordResetExpires: null, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id));
+
+  // Revoke all existing sessions
+  await db.delete(refreshTokensTable).where(eq(refreshTokensTable.userId, user.id)).catch(() => {});
+
+  res.json({ ok: true });
 });
 
 // ─── POST /api/auth/logout ────────────────────────────────────────────────────

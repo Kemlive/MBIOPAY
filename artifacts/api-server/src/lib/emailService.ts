@@ -77,6 +77,67 @@ export async function sendVerificationEmail(email: string, code: string): Promis
   });
 }
 
+export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+  const resetUrl = `https://mbiopay.com/auth?reset=${token}`;
+
+  if (DEV_MODE) {
+    console.log(`\n╔══════════════════════════════════════╗`);
+    console.log(`║  🔑  PASSWORD RESET                   ║`);
+    console.log(`║  To: ${email.padEnd(32)}║`);
+    console.log(`║  URL: ${resetUrl.slice(0, 31).padEnd(31)}║`);
+    console.log(`╚══════════════════════════════════════╝\n`);
+    return;
+  }
+
+  const transporter = createTransport()!;
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: "Reset your MBIO PAY password",
+    text: `You requested a password reset for your MBIO PAY account.\n\nClick the link below to set a new password. The link expires in 1 hour.\n\n${resetUrl}\n\nIf you did not request a password reset, ignore this email — your account is safe.`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#0a0a0f;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0f;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#111118;border:1px solid #1e1e2e;border-radius:16px;overflow:hidden;max-width:480px;width:100%;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#0d2d1a,#0a1f13);padding:24px 32px;border-bottom:1px solid #1e1e2e;">
+            <span style="color:#00c853;font-size:22px;font-weight:700;">MBIO<span style="color:#e8f5e9;margin-left:4px;">PAY</span></span>
+          </td>
+        </tr>
+        <tr><td style="padding:32px;">
+          <p style="color:#a0a0b0;font-size:14px;margin:0 0 8px;">Password Reset</p>
+          <h2 style="color:#e8f5e9;font-size:20px;margin:0 0 16px;font-weight:600;">Reset your password</h2>
+          <p style="color:#a0a0b0;font-size:14px;line-height:1.6;margin:0 0 28px;">
+            We received a request to reset the password for your MBIO PAY account. Click the button below to choose a new password. This link expires in <strong style="color:#e8f5e9;">1 hour</strong>.
+          </p>
+          <div style="text-align:center;margin:0 0 28px;">
+            <a href="${resetUrl}" style="display:inline-block;background:#00c853;color:#0a0f0a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color:#606070;font-size:12px;line-height:1.6;margin:0 0 12px;">
+            If the button does not work, copy and paste this link into your browser:<br/>
+            <a href="${resetUrl}" style="color:#00c853;word-break:break-all;">${resetUrl}</a>
+          </p>
+          <p style="color:#a0a0b0;font-size:12px;line-height:1.6;margin:0 0 16px;background:#1a1a2e;border-left:3px solid #00c853;padding:10px 14px;border-radius:4px;">
+            If you did not request a password reset, ignore this email — your account is safe. MBIO Pay will never ask for your password over email.
+          </p>
+          <div style="border-top:1px solid #1e1e2e;padding-top:16px;margin-top:8px;">
+            <p style="color:#404050;font-size:11px;margin:0;">© 2026 MBIO PAY · Secure digital transfer service</p>
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+  });
+}
+
 export async function sendTwoFADisabledEmail(email: string): Promise<void> {
   if (DEV_MODE) {
     console.log(`[EMAIL] 2FA disabled notification sent to ${email}`);
