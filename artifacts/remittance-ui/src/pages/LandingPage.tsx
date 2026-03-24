@@ -8,19 +8,19 @@ const STEPS = [
   {
     step: "01",
     title: "Create your account",
-    desc: "Sign up with your email. Verified in seconds.",
+    desc: "Sign up with your email and get started in seconds.",
     icon: Smartphone,
   },
   {
     step: "02",
-    title: "Send USDT",
-    desc: "Paste your recipient's phone number, get a live rate, and send USDT to your unique deposit address.",
+    title: "Initiate your transfer",
+    desc: "Enter the recipient's phone number, view the live rate, and follow the instructions to complete your payment.",
     icon: TrendingUp,
   },
   {
     step: "03",
-    title: "Money arrives instantly",
-    desc: "We detect your deposit on-chain and send UGX directly to the recipient's MTN or Airtel wallet.",
+    title: "Funds delivered",
+    desc: "Your transfer is processed and delivered directly to the recipient's mobile money account.",
     icon: Zap,
   },
 ];
@@ -169,7 +169,7 @@ export default function LandingPage() {
         <div className="text-center mb-12">
           <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-2">Simple Process</p>
           <h2 className="text-2xl sm:text-3xl font-display font-bold text-foreground">How it works</h2>
-          <p className="text-muted-foreground mt-2 text-sm max-w-md mx-auto">Three steps from your USDT wallet to your recipient's mobile money.</p>
+          <p className="text-muted-foreground mt-2 text-sm max-w-md mx-auto">Three simple steps to send money directly to your recipient's mobile wallet.</p>
         </div>
 
         <div className="grid sm:grid-cols-3 gap-6 relative">
