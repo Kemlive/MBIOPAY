@@ -20,6 +20,9 @@ export const usersTable = pgTable("users", {
   passwordResetToken: text("password_reset_token"),
   passwordResetExpires: timestamp("password_reset_expires"),
 
+  googleId: text("google_id").unique(),
+  phone: text("phone"),
+
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lockedUntil: timestamp("locked_until"),
   riskScore: integer("risk_score").notNull().default(0),

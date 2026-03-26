@@ -186,4 +186,21 @@ router.patch("/profile/password", requireAuth, async (req, res) => {
   res.json({ success: true, message: "Password updated. Please log in again." });
 });
 
+// POST /api/auth/add-phone — save or update phone number for the authenticated user
+router.post("/auth/add-phone", requireAuth, async (req, res) => {
+  const { phone } = req.body as { phone?: string };
+
+  if (!phone || typeof phone !== "string" || phone.trim().length < 7) {
+    res.status(400).json({ error: "A valid phone number is required" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ phone: phone.trim() })
+    .where(eq(usersTable.id, req.user!.id));
+
+  res.json({ success: true, phone: phone.trim() });
+});
+
 export default router;

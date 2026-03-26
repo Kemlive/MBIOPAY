@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable, refreshTokensTable } from "@workspace/db/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, or } from "drizzle-orm";
 import { signAccess, signRefresh } from "../lib/jwt";
 import { createHash } from "crypto";
 import { logger } from "../lib/logger";
@@ -37,11 +37,22 @@ function userPayload(user: typeof usersTable.$inferSelect) {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    phone: user.phone,
     usernameSet: user.usernameSet,
     emailVerified: user.emailVerified,
     totpEnabled: user.totpEnabled,
     createdAt: user.createdAt,
   };
+}
+
+/** Generate a unique username from email prefix (e.g. john.doe@... → johndoe_a3f2) */
+function generateUsername(email: string): string {
+  const base = email.split("@")[0]!
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 6);
+  return `${base || "user"}_${suffix}`;
 }
 
 // POST /api/auth/google
@@ -65,46 +76,59 @@ router.post("/auth/google", async (req, res) => {
       return;
     }
 
-    const { email, name, picture, email_verified } = payload;
+    const { sub: googleId, email, name, picture, email_verified } = payload;
 
     if (!email_verified) {
       res.status(400).json({ error: "Google account email is not verified" });
       return;
     }
 
-    // Find or create the user
+    const emailLower = email.toLowerCase();
+
+    // Look up by googleId first, fall back to email (merges existing email-only accounts)
     let [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.email, email.toLowerCase()))
+      .where(
+        or(
+          eq(usersTable.googleId, googleId!),
+          eq(usersTable.email, emailLower),
+        ),
+      )
       .limit(1);
 
     if (!user) {
-      // New user — create account (no password, Google-only sign-in)
+      // Brand-new user — create account
       const uid = randomUUID();
-      const randomPass = await bcrypt.hash(randomUUID(), 12); // unguessable, login only via Google
+      const randomPass = await bcrypt.hash(randomUUID(), 12); // unguessable — Google-only login
+      const username = generateUsername(emailLower);
+
       const [created] = await db
         .insert(usersTable)
         .values({
           uid,
-          email: email.toLowerCase(),
+          email: emailLower,
+          username,
           passwordHash: randomPass,
-          displayName: name ?? email.split("@")[0],
+          displayName: name ?? emailLower.split("@")[0],
           avatarUrl: picture ?? null,
+          googleId: googleId!,
           emailVerified: true,
           usernameSet: false,
         })
         .returning();
       user = created;
-      logger.info({ email, uid }, "New user created via Google Sign-In");
+      logger.info({ email: emailLower, uid, googleId }, "New user created via Google Sign-In");
     } else {
-      // Existing user — update avatar/name if changed from Google
-      if (picture && user.avatarUrl !== picture) {
-        await db
-          .update(usersTable)
-          .set({ avatarUrl: picture, emailVerified: true })
-          .where(eq(usersTable.id, user.id));
-        user = { ...user, avatarUrl: picture, emailVerified: true };
+      // Existing user — stamp googleId if missing, refresh avatar
+      const updates: Partial<typeof usersTable.$inferInsert> = {};
+      if (!user.googleId) updates.googleId = googleId!;
+      if (picture && user.avatarUrl !== picture) updates.avatarUrl = picture;
+      if (!user.emailVerified) updates.emailVerified = true;
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(usersTable).set(updates).where(eq(usersTable.id, user.id));
+        user = { ...user, ...updates };
       }
     }
 
@@ -118,7 +142,7 @@ router.post("/auth/google", async (req, res) => {
     const refreshToken = signRefresh({ userId: user.id, uid: user.uid });
     await storeRefreshToken(user.id, refreshToken);
 
-    // Clean up expired tokens
+    // Prune expired refresh tokens for this user
     await db
       .delete(refreshTokensTable)
       .where(
@@ -139,7 +163,11 @@ router.post("/auth/google", async (req, res) => {
       .json({ accessToken, user: userPayload(user) });
   } catch (err: any) {
     logger.error({ err }, "Google Sign-In verification failed");
-    if (err?.message?.includes("Token used too late") || err?.message?.includes("Invalid token")) {
+    if (
+      err?.message?.includes("Token used too late") ||
+      err?.message?.includes("Invalid token") ||
+      err?.message?.includes("wrong number of segments")
+    ) {
       res.status(401).json({ error: "Google token is invalid or expired. Please try again." });
     } else {
       res.status(500).json({ error: "Google Sign-In failed. Please try again." });

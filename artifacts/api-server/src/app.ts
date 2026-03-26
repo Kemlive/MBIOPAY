@@ -152,6 +152,7 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use("/api", globalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/signup", loginLimiter);
+app.use("/api/auth/google", loginLimiter);
 
 // Visit tracking (MongoDB, non-blocking)
 app.use("/api", visitTracker);
