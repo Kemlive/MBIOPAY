@@ -1,14 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck } from "lucide-react";
-import { useLogin, useSignup, useVerify, loginSchema, signupSchema, verifySchema } from "@/hooks/use-auth";
+import { useLogin, useSignup, useVerify, useGoogleSignIn, loginSchema, signupSchema, verifySchema } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: object) => void;
+          renderButton: (el: HTMLElement, config: object) => void;
+        };
+      };
+    };
+  }
+}
+
+const GOOGLE_CLIENT_ID = "164482455669-9ujlu5kroaqdhms05sacmjbq0aciam06.apps.googleusercontent.com";
 
 type AuthMode = "login" | "signup" | "verify";
 
@@ -17,10 +32,49 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
   const [emailForVerification, setEmailForVerification] = useState("");
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   const loginMutation = useLogin();
   const signupMutation = useSignup();
   const verifyMutation = useVerify();
+  const googleSignIn = useGoogleSignIn();
+
+  // Initialize Google Sign-In button
+  useEffect(() => {
+    if (mode === "verify") return;
+
+    const initGoogle = () => {
+      if (!window.google || !googleBtnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response: { credential: string }) => {
+          try {
+            await googleSignIn.mutateAsync(response.credential);
+            toast({ title: "Welcome!", description: "Signed in with Google." });
+            setLocation("/");
+          } catch (err: any) {
+            toast({ variant: "destructive", title: "Google Sign-In failed", description: err.message });
+          }
+        },
+      });
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "filled_black",
+        size: "large",
+        width: googleBtnRef.current.offsetWidth || 320,
+        text: mode === "signup" ? "signup_with" : "signin_with",
+        shape: "rectangular",
+      });
+    };
+
+    // Google script may still be loading
+    if (window.google) {
+      initGoogle();
+    } else {
+      const script = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+      script?.addEventListener("load", initGoogle);
+      return () => script?.removeEventListener("load", initGoogle);
+    }
+  }, [mode]);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -137,6 +191,14 @@ export default function AuthPage() {
                   </Button>
                 </form>
 
+                <div className="relative my-6 flex items-center gap-3">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-xs text-muted-foreground">or continue with</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+
+                <div ref={googleBtnRef} className="w-full flex justify-center" />
+
                 <div className="mt-6 text-center text-sm text-muted-foreground">
                   Don't have an account?{" "}
                   <button onClick={() => setMode("signup")} className="text-primary font-medium hover:underline">
@@ -191,6 +253,14 @@ export default function AuthPage() {
                     Create Account
                   </Button>
                 </form>
+
+                <div className="relative my-6 flex items-center gap-3">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-xs text-muted-foreground">or sign up with</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+
+                <div ref={googleBtnRef} className="w-full flex justify-center" />
 
                 <div className="mt-6 text-center text-sm text-muted-foreground">
                   Already have an account?{" "}

@@ -69,6 +69,21 @@ export function useVerify() {
   });
 }
 
+export function useGoogleSignIn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (credential: string) =>
+      fetchApi<{ accessToken: string; user: any }>('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ token: credential }),
+      }),
+    onSuccess: (data) => {
+      localStorage.setItem('mbio_token', data.accessToken);
+      queryClient.setQueryData(['/auth/me'], data.user);
+    },
+  });
+}
+
 export function useLogout() {
   const queryClient = useQueryClient();
   return () => {

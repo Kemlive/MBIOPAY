@@ -9,6 +9,7 @@ import adminRouter from "./admin";
 import adminAuthRouter from "./adminAuth";
 import activityRouter from "./activity";
 import trackingRouter from "./tracking";
+import authGoogleRouter from "./authGoogle";
 
 const router: IRouter = Router();
 
@@ -16,6 +17,7 @@ router.use(healthRouter);
 router.use(activityRouter);
 router.use(walletRouter);
 router.use(authRouter);
+router.use(authGoogleRouter);
 router.use(profileRouter);
 router.use(twofaRouter);
 router.use(ordersRouter);
