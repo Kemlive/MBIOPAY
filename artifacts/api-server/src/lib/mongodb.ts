@@ -12,6 +12,11 @@ export async function connectMongo(): Promise<void> {
     return;
   }
 
+  if (!uri.startsWith("mongodb://") && !uri.startsWith("mongodb+srv://")) {
+    logger.error("MONGODB_URI is invalid — make sure to replace <db_password> with your real Atlas password in Replit Secrets");
+    return;
+  }
+
   try {
     await mongoose.connect(uri, {
       dbName: "mbio",
