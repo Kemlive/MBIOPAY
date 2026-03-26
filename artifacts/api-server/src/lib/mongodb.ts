@@ -12,6 +12,9 @@ export async function connectMongo(): Promise<void> {
     return;
   }
 
+  // Debug: log first 20 chars and length to diagnose format issues
+  logger.info(`MONGODB_URI debug — length: ${uri.length}, first20: "${uri.slice(0, 20)}"`);
+
   if (!uri.startsWith("mongodb://") && !uri.startsWith("mongodb+srv://")) {
     logger.error("MONGODB_URI is invalid — make sure to replace <db_password> with your real Atlas password in Replit Secrets");
     return;
