@@ -9,14 +9,14 @@ export default function OverviewPage() {
   const stats = [
     {
       title: "Total Users",
-      value: data?.totalUsers.toLocaleString() || "0",
+      value: data?.totalUsers?.toLocaleString() || "0",
       icon: Users,
       color: "text-blue-400",
       bg: "bg-blue-500/10",
     },
     {
       title: "Total Orders",
-      value: data?.totalOrders.toLocaleString() || "0",
+      value: data?.totalOrders?.toLocaleString() || "0",
       icon: Activity,
       color: "text-indigo-400",
       bg: "bg-indigo-500/10",
@@ -37,14 +37,14 @@ export default function OverviewPage() {
     },
     {
       title: "Fraud Flags",
-      value: data?.fraudFlags.toLocaleString() || "0",
+      value: data?.fraudFlags?.toLocaleString() || "0",
       icon: ShieldAlert,
       color: "text-red-400",
       bg: "bg-red-500/10",
     },
     {
       title: "Pending Orders",
-      value: data?.pendingOrders.toLocaleString() || "0",
+      value: data?.pendingOrders?.toLocaleString() || "0",
       icon: Clock,
       color: "text-orange-400",
       bg: "bg-orange-500/10",

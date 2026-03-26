@@ -6,14 +6,14 @@ export default function AnalyticsPage() {
   const { data, isLoading } = useAnalytics();
 
   const stats = [
-    { title: "Total Visits", value: data?.totalVisits.toLocaleString(), icon: Globe, color: "text-blue-400" },
-    { title: "Unique IPs", value: data?.uniqueIps.toLocaleString(), icon: MapPin, color: "text-indigo-400" },
-    { title: "Email Leads", value: data?.totalLeads.toLocaleString(), icon: Users, color: "text-emerald-400" },
-    { title: "Referrals", value: data?.totalReferrals.toLocaleString(), icon: LinkIcon, color: "text-amber-400" },
+    { title: "Total Visits", value: data?.totalVisits?.toLocaleString(), icon: Globe, color: "text-blue-400" },
+    { title: "Unique IPs", value: data?.uniqueIps?.toLocaleString(), icon: MapPin, color: "text-indigo-400" },
+    { title: "Email Leads", value: data?.totalLeads?.toLocaleString(), icon: Users, color: "text-emerald-400" },
+    { title: "Referrals", value: data?.totalReferrals?.toLocaleString(), icon: LinkIcon, color: "text-amber-400" },
   ];
 
   // Calculate max count for the bar chart scaling
-  const maxCountryCount = data?.topCountries.reduce((max, c) => Math.max(max, c.count), 0) || 1;
+  const maxCountryCount = data?.topCountries?.reduce((max, c) => Math.max(max, c.count), 0) || 1;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -99,12 +99,12 @@ export default function AnalyticsPage() {
                 <tbody className="divide-y divide-white/5">
                   {isLoading ? (
                     <tr><td colSpan={3} className="px-4 py-8 text-center">Loading...</td></tr>
-                  ) : data?.topCountries.map((item, i) => (
+                  ) : data?.topCountries?.map((item, i) => (
                     <tr key={i} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 font-medium">{item.country}</td>
                       <td className="px-4 py-3 text-right">{item.count.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">
-                        {data.totalVisits > 0 ? ((item.count / data.totalVisits) * 100).toFixed(1) : 0}%
+                        {(data?.totalVisits ?? 0) > 0 ? ((item.count / (data?.totalVisits ?? 1)) * 100).toFixed(1) : 0}%
                       </td>
                     </tr>
                   ))}

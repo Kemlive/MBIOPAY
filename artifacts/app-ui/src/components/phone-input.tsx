@@ -19,11 +19,13 @@ export function PhoneInput({ onChange, placeholder = "+256700000000" }: PhoneInp
       geoIpLookup: (callback) => {
         fetch("https://ipapi.co/json")
           .then((res) => res.json())
-          .then((data) => callback(data.country_code ?? "UG"))
-          .catch(() => callback("UG"));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .then((data) => callback((data.country_code as string)?.toLowerCase() as any))
+          .catch(() => callback("ug" as any));
       },
-      utilsScript:
-        "https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js",
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore — utils.js has no type declarations but is valid at runtime
+      loadUtils: () => import("intl-tel-input/build/js/utils.js"),
     });
 
     itiRef.current = iti;

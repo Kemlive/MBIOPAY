@@ -94,9 +94,9 @@ export default function UsersPage() {
                       {format(new Date(user.joinedAt), "MMM d, yyyy")}
                     </td>
                     <td className="px-6 py-4">
-                      <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border", getRiskColor(user.riskScore))}>
+                      <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border", getRiskColor(user.riskScore ?? 0))}>
                         <ShieldAlert className="w-3 h-3" />
-                        {user.riskScore}/100
+                        {user.riskScore ?? 0}/100
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -110,7 +110,7 @@ export default function UsersPage() {
                       <Button 
                         variant={user.isFrozen ? "outline" : "destructive"} 
                         size="sm"
-                        onClick={() => handleToggleFreeze(user.id, user.isFrozen)}
+                        onClick={() => handleToggleFreeze(String(user.id), !!user.isFrozen)}
                         className="w-28"
                       >
                         {user.isFrozen ? (

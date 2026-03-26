@@ -50,10 +50,10 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       
       {/* Protected Dashboard Routes */}
-      <Route path="/dashboard" render={() => <ProtectedRoute component={OverviewPage} />} />
-      <Route path="/dashboard/users" render={() => <ProtectedRoute component={UsersPage} />} />
-      <Route path="/dashboard/orders" render={() => <ProtectedRoute component={OrdersPage} />} />
-      <Route path="/dashboard/analytics" render={() => <ProtectedRoute component={AnalyticsPage} />} />
+      <Route path="/dashboard" component={() => <ProtectedRoute component={OverviewPage} />} />
+      <Route path="/dashboard/users" component={() => <ProtectedRoute component={UsersPage} />} />
+      <Route path="/dashboard/orders" component={() => <ProtectedRoute component={OrdersPage} />} />
+      <Route path="/dashboard/analytics" component={() => <ProtectedRoute component={AnalyticsPage} />} />
       
       <Route component={NotFound} />
     </Switch>

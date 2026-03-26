@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck } from "lucide-react";
+import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck, Phone } from "lucide-react";
 import { useLogin, useSignup, useVerify, useGoogleSignIn, useAddPhone, loginSchema, signupSchema, verifySchema } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,13 +83,13 @@ export default function AuthPage() {
       });
     };
 
-    if (window.google) {
-      initGoogle();
-    } else {
+    if (!window.google) {
       const script = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
       script?.addEventListener("load", initGoogle);
       return () => script?.removeEventListener("load", initGoogle);
     }
+    initGoogle();
+    return;
   }, [mode]);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({

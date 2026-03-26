@@ -96,10 +96,10 @@ export default function OrdersPage() {
                       {order.userName}
                     </td>
                     <td className="px-6 py-4 text-right font-medium text-emerald-400">
-                      {formatCurrency(order.amountUsdt, 'USDT')}
+                      {formatCurrency(order.amountUsdt ?? 0, 'USDT')}
                     </td>
                     <td className="px-6 py-4 text-right font-medium text-white">
-                      {formatCurrency(order.amountUgx, 'UGX')}
+                      {formatCurrency(order.amountUgx ?? 0, 'UGX')}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
