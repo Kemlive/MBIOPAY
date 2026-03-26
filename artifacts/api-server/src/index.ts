@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startWalletWatcher } from "./lib/walletWatcher";
+import { connectMongo } from "./lib/mongodb";
 
 const rawPort = process.env["PORT"];
 
@@ -13,6 +14,9 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// Connect to MongoDB (non-blocking — app starts regardless)
+connectMongo().catch(() => {});
 
 const server = app.listen(port, (err) => {
   if (err) {

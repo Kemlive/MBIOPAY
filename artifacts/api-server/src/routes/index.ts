@@ -8,7 +8,7 @@ import twofaRouter from "./twofa";
 import adminRouter from "./admin";
 import adminAuthRouter from "./adminAuth";
 import activityRouter from "./activity";
-import leadsRouter from "./leads";
+import trackingRouter from "./tracking";
 
 const router: IRouter = Router();
 
@@ -21,6 +21,6 @@ router.use(twofaRouter);
 router.use(ordersRouter);
 router.use(adminAuthRouter);
 router.use(adminRouter);
-router.use(leadsRouter);
+router.use(trackingRouter);
 
 export default router;

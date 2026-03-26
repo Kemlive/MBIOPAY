@@ -5,6 +5,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import router from "./routes";
+import { visitTracker } from "./routes/tracking";
 import { logger } from "./lib/logger";
 import { createHash } from "crypto";
 
@@ -144,6 +145,9 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use("/api", globalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/signup", loginLimiter);
+
+// Visit tracking (MongoDB, non-blocking)
+app.use("/api", visitTracker);
 
 app.use("/api", router);
 
