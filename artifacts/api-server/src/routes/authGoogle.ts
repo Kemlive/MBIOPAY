@@ -160,7 +160,7 @@ router.post("/auth/google", async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: "/api/auth",
       })
-      .json({ accessToken, user: userPayload(user) });
+      .json({ token: accessToken, user: userPayload(user) });
   } catch (err: any) {
     logger.error({ err }, "Google Sign-In verification failed");
     if (

@@ -32,13 +32,13 @@ export function useUser() {
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: z.infer<typeof loginSchema>) => 
-      fetchApi<{ accessToken: string, user: any }>('/auth/login', {
+    mutationFn: (data: z.infer<typeof loginSchema>) =>
+      fetchApi<{ token: string; user: any }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     onSuccess: (data) => {
-      localStorage.setItem('mbio_token', data.accessToken);
+      localStorage.setItem('token', data.token);
       queryClient.setQueryData(['/auth/me'], data.user);
     },
   });
@@ -46,7 +46,7 @@ export function useLogin() {
 
 export function useSignup() {
   return useMutation({
-    mutationFn: (data: z.infer<typeof signupSchema>) => 
+    mutationFn: (data: z.infer<typeof signupSchema>) =>
       fetchApi<{ message: string }>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -57,13 +57,13 @@ export function useSignup() {
 export function useVerify() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: z.infer<typeof verifySchema>) => 
-      fetchApi<{ accessToken: string, user: any }>('/auth/verify-email', {
+    mutationFn: (data: z.infer<typeof verifySchema>) =>
+      fetchApi<{ token: string; user: any }>('/auth/verify-email', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     onSuccess: (data) => {
-      localStorage.setItem('mbio_token', data.accessToken);
+      localStorage.setItem('token', data.token);
       queryClient.setQueryData(['/auth/me'], data.user);
     },
   });
@@ -73,13 +73,29 @@ export function useGoogleSignIn() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (credential: string) =>
-      fetchApi<{ accessToken: string; user: any }>('/auth/google', {
+      fetchApi<{ token: string; user: any }>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token: credential }),
       }),
     onSuccess: (data) => {
-      localStorage.setItem('mbio_token', data.accessToken);
+      localStorage.setItem('token', data.token);
       queryClient.setQueryData(['/auth/me'], data.user);
+    },
+  });
+}
+
+export function useAddPhone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (phone: string) =>
+      fetchApi<{ success: boolean; phone: string }>('/auth/add-phone', {
+        method: 'POST',
+        body: JSON.stringify({ phone }),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['/auth/me'], (prev: any) =>
+        prev ? { ...prev, phone: data.phone } : prev,
+      );
     },
   });
 }
@@ -87,7 +103,7 @@ export function useGoogleSignIn() {
 export function useLogout() {
   const queryClient = useQueryClient();
   return () => {
-    localStorage.removeItem('mbio_token');
+    localStorage.removeItem('token');
     queryClient.setQueryData(['/auth/me'], null);
     queryClient.clear();
     window.location.href = '/auth';

@@ -60,6 +60,7 @@ function userPayload(user: typeof usersTable.$inferSelect) {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    phone: user.phone ?? null,
     usernameSet: user.usernameSet,
     emailVerified: user.emailVerified,
     totpEnabled: user.totpEnabled,
@@ -184,7 +185,7 @@ router.post("/auth/verify-email", async (req, res) => {
   await storeRefreshToken(user.id, refreshToken);
 
   res.json({
-    accessToken,
+    token: accessToken,
     refreshToken,
     user: userPayload({ ...user, emailVerified: true, emailVerifyCode: null, emailVerifyExpires: null }),
   });
@@ -321,7 +322,7 @@ router.post("/auth/login", async (req, res) => {
   const refreshToken = signRefresh({ id: user.id });
   await storeRefreshToken(user.id, refreshToken);
 
-  res.json({ accessToken, refreshToken, user: userPayload(user) });
+  res.json({ token: accessToken, refreshToken, user: userPayload(user) });
 });
 
 // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
@@ -359,7 +360,7 @@ router.post("/auth/refresh", async (req, res) => {
     const newRefreshToken = signRefresh({ id: user.id });
     await storeRefreshToken(user.id, newRefreshToken);
 
-    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+    res.json({ token: newAccessToken, refreshToken: newRefreshToken });
   } catch {
     res.status(401).json({ error: "Invalid or expired refresh token" });
   }

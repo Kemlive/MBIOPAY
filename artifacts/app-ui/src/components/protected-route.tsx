@@ -8,7 +8,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { data: user, isLoading } = useUser();
 
   useEffect(() => {
-    const token = localStorage.getItem('mbio_token');
+    const token = localStorage.getItem('token');
     if (!isLoading && (!token || !user)) {
       setLocation('/auth');
     }

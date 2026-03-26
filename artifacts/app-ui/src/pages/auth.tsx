@@ -4,8 +4,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck } from "lucide-react";
-import { useLogin, useSignup, useVerify, useGoogleSignIn, loginSchema, signupSchema, verifySchema } from "@/hooks/use-auth";
+import { Activity, Mail, Lock, User, ArrowRight, ShieldCheck, Phone } from "lucide-react";
+import { useLogin, useSignup, useVerify, useGoogleSignIn, useAddPhone, loginSchema, signupSchema, verifySchema } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -25,23 +25,34 @@ declare global {
 
 const GOOGLE_CLIENT_ID = "164482455669-9ujlu5kroaqdhms05sacmjbq0aciam06.apps.googleusercontent.com";
 
-type AuthMode = "login" | "signup" | "verify";
+type AuthMode = "login" | "signup" | "verify" | "phone";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
   const [emailForVerification, setEmailForVerification] = useState("");
+  const [phone, setPhone] = useState("");
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
   const loginMutation = useLogin();
   const signupMutation = useSignup();
   const verifyMutation = useVerify();
   const googleSignIn = useGoogleSignIn();
+  const addPhone = useAddPhone();
+
+  // After a successful login, go to phone step if user has no phone, else dashboard
+  const postLogin = (user: any) => {
+    if (!user?.phone) {
+      setMode("phone");
+    } else {
+      setLocation("/");
+    }
+  };
 
   // Initialize Google Sign-In button
   useEffect(() => {
-    if (mode === "verify") return;
+    if (mode === "verify" || mode === "phone") return;
 
     const initGoogle = () => {
       if (!window.google || !googleBtnRef.current) return;
@@ -49,9 +60,9 @@ export default function AuthPage() {
         client_id: GOOGLE_CLIENT_ID,
         callback: async (response: { credential: string }) => {
           try {
-            await googleSignIn.mutateAsync(response.credential);
+            const data = await googleSignIn.mutateAsync(response.credential);
             toast({ title: "Welcome!", description: "Signed in with Google." });
-            setLocation("/");
+            postLogin(data.user);
           } catch (err: any) {
             toast({ variant: "destructive", title: "Google Sign-In failed", description: err.message });
           }
@@ -66,7 +77,6 @@ export default function AuthPage() {
       });
     };
 
-    // Google script may still be loading
     if (window.google) {
       initGoogle();
     } else {
@@ -93,9 +103,9 @@ export default function AuthPage() {
 
   const onLogin = async (data: z.infer<typeof loginSchema>) => {
     try {
-      await loginMutation.mutateAsync(data);
+      const result = await loginMutation.mutateAsync(data);
       toast({ title: "Welcome back!", description: "Successfully logged in." });
-      setLocation("/");
+      postLogin(result.user);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Login failed", description: error.message });
     }
@@ -115,11 +125,27 @@ export default function AuthPage() {
 
   const onVerify = async (data: z.infer<typeof verifySchema>) => {
     try {
-      await verifyMutation.mutateAsync(data);
+      const result = await verifyMutation.mutateAsync(data);
       toast({ title: "Verified!", description: "Your account is now active." });
-      setLocation("/");
+      postLogin(result.user);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Verification failed", description: error.message });
+    }
+  };
+
+  const onAddPhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = phone.trim();
+    if (!trimmed || trimmed.length < 7) {
+      toast({ variant: "destructive", title: "Invalid phone", description: "Enter a valid phone number (e.g. +256700123456)" });
+      return;
+    }
+    try {
+      await addPhone.mutateAsync(trimmed);
+      toast({ title: "Phone saved!", description: `${trimmed} has been linked to your account.` });
+      setLocation("/");
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Failed to save phone", description: error.message });
     }
   };
 
@@ -305,6 +331,47 @@ export default function AuthPage() {
 
                 <button onClick={() => setMode("login")} className="mt-6 text-sm text-muted-foreground hover:text-white transition-colors">
                   Back to login
+                </button>
+              </motion.div>
+            )}
+
+            {mode === "phone" && (
+              <motion.div
+                key="phone"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="text-center"
+              >
+                <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Phone className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Add your mobile number</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Your MTN or Airtel Uganda number for payouts.<br />
+                  Format: <span className="text-white font-mono">+256700123456</span>
+                </p>
+
+                <form onSubmit={onAddPhone} className="space-y-4">
+                  <Input
+                    type="tel"
+                    placeholder="+256700000000"
+                    icon={<Phone className="w-5 h-5" />}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="text-center font-mono tracking-wide h-14 text-lg"
+                  />
+
+                  <Button type="submit" className="w-full mt-4" size="lg" isLoading={addPhone.isPending}>
+                    Save & Continue <ArrowRight className="ml-2 w-5 h-5" />
+                  </Button>
+                </form>
+
+                <button
+                  onClick={() => setLocation("/")}
+                  className="mt-4 text-sm text-muted-foreground hover:text-white transition-colors"
+                >
+                  Skip for now
                 </button>
               </motion.div>
             )}
