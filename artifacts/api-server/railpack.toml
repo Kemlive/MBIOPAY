@@ -1,9 +1,8 @@
 [build]
-packageManager = "pnpm"
+builder = "nixpacks"
+buildCommand = "npm install --legacy-peer-deps"
 
 [deploy]
-startCommand = "pnpm run build && pnpm run start"
+startCommand = "node index.js"
 restartPolicyType = "on-failure"
-restartPolicyMaxRetries = 5
-healthcheckPath = "/health"
-healthcheckTimeout = 300
+restartPolicyMaxRetries = 3
