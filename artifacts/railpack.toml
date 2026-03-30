@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node index.js"        # ← update to your actual start command
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 5           # higher retries = safer for payments
+
+healthcheckPath = "/health"           # add a /health endpoint in your app
+healthcheckTimeout = 300
