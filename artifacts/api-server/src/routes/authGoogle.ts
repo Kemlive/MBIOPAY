@@ -138,8 +138,8 @@ router.post("/auth/google", async (req, res) => {
     }
 
     // Issue tokens
-    const accessToken = signAccess({ userId: user.id, uid: user.uid });
-    const refreshToken = signRefresh({ userId: user.id, uid: user.uid });
+    const accessToken = signAccess({ id: user.id, uid: user.uid });
+const refreshToken = signRefresh({ id: user.id, uid: user.uid });
     await storeRefreshToken(user.id, refreshToken);
 
     // Prune expired refresh tokens for this user
