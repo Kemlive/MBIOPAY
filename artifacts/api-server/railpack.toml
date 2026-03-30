@@ -1,0 +1,9 @@
+[build]
+packageManager = "pnpm"
+
+[deploy]
+startCommand = "pnpm run build && pnpm run start"
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 5
+healthcheckPath = "/health"
+healthcheckTimeout = 300
