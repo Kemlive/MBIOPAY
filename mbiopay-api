@@ -1,0 +1,3 @@
+server.js (backend code)
+package.json (dependencies)
+.env.example (environment template)
