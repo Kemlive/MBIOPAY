@@ -1,0 +1,5 @@
+package.json (with "start": "http-server -p 3000 -c-1")
+index.html
+style.css
+config.js
+app.js
