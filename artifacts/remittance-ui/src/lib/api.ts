@@ -1,4 +1,4 @@
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const BASE = import.meta.env.VITE_API_URL || "https://mbiopay-production-5f7f.up.railway.app";
 
 const TOKEN_KEY = "mbio_access";
 const REFRESH_KEY = "mbio_refresh";
