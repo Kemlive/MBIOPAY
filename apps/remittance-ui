@@ -1,0 +1,2 @@
+config.js: const API = "https://mbiopay-production-5f7f.up.railway.app";
+package.json: "start": "http-server -p 3002 -c-1"
