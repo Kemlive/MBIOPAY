@@ -1,0 +1,15 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @workspace/admin-ui run build"
+
+[deploy]
+startCommand = "npm install -g serve && serve -s artifacts/admin-ui/dist/public -l 20787"
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 3
+healthcheckPath = "/admin-ui/"
+healthcheckTimeout = 30
+
+[deploy.env]
+NODE_ENV = "production"
+PORT = "20787"
+BASE_PATH = "/admin-ui/"
