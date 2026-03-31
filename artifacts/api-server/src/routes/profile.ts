@@ -207,4 +207,76 @@ router.post("/auth/add-phone", requireAuth, async (req, res) => {
   res.json({ success: true, phone: phone.trim() });
 });
 
+// ── /user/profile aliases ─────────────────────────────────────────────────────
+// Expose profile data under the /user namespace for REST convention alignment.
+
+router.get("/user/profile", requireAuth, async (req, res) => {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.id))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  res.json({
+    id: user.id,
+    uid: user.uid,
+    email: user.email,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    phone: user.phone ?? null,
+    hasPhone: !!user.phone,
+    usernameSet: user.usernameSet,
+    emailVerified: user.emailVerified,
+    totpEnabled: user.totpEnabled,
+    createdAt: user.createdAt,
+  });
+});
+
+const UpdateUserProfileSchema = z.object({
+  displayName: z.string().min(1).max(60).optional(),
+  avatarUrl: z
+    .string()
+    .max(MAX_AVATAR_BYTES, "Avatar too large (max 2 MB)")
+    .optional(),
+  phone: z.string().min(7).max(20).optional(),
+});
+
+router.put("/user/profile", requireAuth, async (req, res) => {
+  const parsed = UpdateUserProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+
+  const updates: Partial<typeof usersTable.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (parsed.data.displayName !== undefined) updates.displayName = parsed.data.displayName;
+  if (parsed.data.avatarUrl !== undefined) updates.avatarUrl = parsed.data.avatarUrl;
+  if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone.trim();
+
+  const [user] = await db
+    .update(usersTable)
+    .set(updates)
+    .where(eq(usersTable.id, req.user!.id))
+    .returning();
+
+  res.json({
+    id: user.id,
+    uid: user.uid,
+    email: user.email,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    phone: user.phone ?? null,
+    usernameSet: user.usernameSet,
+  });
+});
+
 export default router;

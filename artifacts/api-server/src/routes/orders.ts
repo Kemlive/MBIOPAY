@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
+import { createHash as _createHash } from "crypto";
 import { db } from "@workspace/db";
 import { ordersTable } from "@workspace/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
@@ -8,6 +9,7 @@ import { requireAuth } from "../lib/auth-middleware";
 import { getDynamicRate } from "../lib/dynamicRate";
 import { createDepositAccount, getFlutterwaveUgxBalance } from "../lib/walletWatcher";
 import { runFraudChecks, checkUserFrozen } from "../lib/fraudDetector";
+import { logger } from "../lib/logger";
 
 const ORDER_TTL_MINUTES = 30;
 
@@ -33,6 +35,17 @@ const CreateOrderSchema = z.object({
   idempotencyKey: z.string().min(8).max(64).optional(),
 });
 
+/**
+ * Idempotency is enforced at two layers:
+ *
+ * 1. In-memory map (fast path): catches duplicate requests within the same
+ *    process instance within a 10-minute window.
+ *
+ * 2. DB check (slow path / double-spend guard): queries the orders table for
+ *    an existing order with the same user + phone + network + amount created
+ *    within the last 30 seconds. This survives process restarts and prevents
+ *    double-spending even when the in-memory map is cold.
+ */
 const recentIdempotencyKeys = new Map<string, number>();
 
 function cleanupOldKeys() {
@@ -40,6 +53,33 @@ function cleanupOldKeys() {
   for (const [key, ts] of recentIdempotencyKeys) {
     if (ts < cutoff) recentIdempotencyKeys.delete(key);
   }
+}
+
+function idempotencyKeyHash(userId: number, key: string): string {
+  return _createHash("sha256").update(`${userId}:${key}`).digest("hex");
+}
+
+async function isDoubleSpend(
+  userId: number,
+  phone: string,
+  network: string,
+  amount: number,
+): Promise<boolean> {
+  const windowStart = new Date(Date.now() - 30 * 1000); // 30-second dedup window
+  const [existing] = await db
+    .select({ id: ordersTable.id })
+    .from(ordersTable)
+    .where(
+      and(
+        eq(ordersTable.userId, userId),
+        eq(ordersTable.phone, phone),
+        eq(ordersTable.network, network),
+        eq(ordersTable.amount, amount),
+        gte(ordersTable.createdAt, windowStart),
+      ),
+    )
+    .limit(1);
+  return !!existing;
 }
 
 const FLW_NETWORK_CODES: Record<string, string> = { MTN: "MPS", Airtel: "AIN" };
@@ -151,14 +191,22 @@ router.post("/orders", requireAuth, async (req, res) => {
 
   const { phone, network, expectedUsdt, idempotencyKey } = parsed.data;
 
+  // ── Layer 1: in-memory idempotency key check (fast path) ──────────────────
   if (idempotencyKey) {
-    const iKey = `${req.user!.id}:${idempotencyKey}`;
+    const iKeyHash = idempotencyKeyHash(req.user!.id, idempotencyKey);
     cleanupOldKeys();
-    if (recentIdempotencyKeys.has(iKey)) {
+    if (recentIdempotencyKeys.has(iKeyHash)) {
       res.status(409).json({ error: "Duplicate request — this order was already submitted" });
       return;
     }
-    recentIdempotencyKeys.set(iKey, Date.now());
+    recentIdempotencyKeys.set(iKeyHash, Date.now());
+  }
+
+  // ── Layer 2: DB double-spend guard (survives restarts) ────────────────────
+  const doubleSpend = await isDoubleSpend(req.user!.id, phone, network, expectedUsdt);
+  if (doubleSpend) {
+    res.status(409).json({ error: "A duplicate order for the same phone, network, and amount was submitted within the last 30 seconds. Please wait before retrying." });
+    return;
   }
 
   const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
@@ -317,6 +365,74 @@ router.get("/orders/:id", requireAuth, async (req, res) => {
 
   if (!order) {
     res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  if (order.userId !== req.user!.id) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  res.json(order);
+});
+
+// ── /transactions aliases ─────────────────────────────────────────────────────
+// Expose the same order data under a /transactions namespace for API clarity.
+
+router.get("/transactions", requireAuth, async (req, res) => {
+  const limit = Math.min(parseInt((req.query.limit as string) ?? "50", 10), 100);
+  const offset = Math.max(parseInt((req.query.offset as string) ?? "0", 10), 0);
+
+  const orders = await db
+    .select({
+      id: ordersTable.id,
+      phone: ordersTable.phone,
+      network: ordersTable.network,
+      amount: ordersTable.amount,
+      ugxAmount: ordersTable.ugxAmount,
+      status: ordersTable.status,
+      txid: ordersTable.txid,
+      depositAddress: ordersTable.depositAddress,
+      expiresAt: ordersTable.expiresAt,
+      createdAt: ordersTable.createdAt,
+      updatedAt: ordersTable.updatedAt,
+    })
+    .from(ordersTable)
+    .where(eq(ordersTable.userId, req.user!.id))
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json({ transactions: orders, limit, offset });
+});
+
+router.get("/transactions/:txId", requireAuth, async (req, res) => {
+  const id = parseInt(req.params.txId ?? "", 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid transaction ID" });
+    return;
+  }
+
+  const [order] = await db
+    .select({
+      id: ordersTable.id,
+      userId: ordersTable.userId,
+      phone: ordersTable.phone,
+      network: ordersTable.network,
+      amount: ordersTable.amount,
+      ugxAmount: ordersTable.ugxAmount,
+      status: ordersTable.status,
+      txid: ordersTable.txid,
+      depositAddress: ordersTable.depositAddress,
+      expiresAt: ordersTable.expiresAt,
+      createdAt: ordersTable.createdAt,
+      updatedAt: ordersTable.updatedAt,
+    })
+    .from(ordersTable)
+    .where(eq(ordersTable.id, id));
+
+  if (!order) {
+    res.status(404).json({ error: "Transaction not found" });
     return;
   }
 

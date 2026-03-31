@@ -75,6 +75,15 @@ app.get("/.well-known/security.txt", (_req, res) => {
 function buildAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
 
+  // Explicit allow-list from environment (comma-separated, highest priority)
+  // e.g. ALLOWED_ORIGINS=https://mbiopay.com,https://app.mbiopay.com
+  const envOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
+  envOrigins.forEach((o) => {
+    const trimmed = o.trim();
+    if (trimmed) origins.add(trimmed);
+  });
+
+  // Replit preview domains (injected automatically by the Replit runtime)
   const replitDomains = process.env.REPLIT_DOMAINS?.split(",") ?? [];
   replitDomains.forEach((d) => origins.add(`https://${d.trim()}`));
 
@@ -82,12 +91,14 @@ function buildAllowedOrigins(): Set<string> {
     origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
   }
 
-  // Production custom domains
-  origins.add("https://mbiopay.com");
-  origins.add("https://www.mbiopay.com");
-  origins.add("https://app.mbiopay.com");
-  origins.add("https://admin.mbiopay.com");
-  origins.add("https://api.mbiopay.com");
+  // Production custom domains (kept as safe defaults when ALLOWED_ORIGINS is not set)
+  if (!process.env.ALLOWED_ORIGINS) {
+    origins.add("https://mbiopay.com");
+    origins.add("https://www.mbiopay.com");
+    origins.add("https://app.mbiopay.com");
+    origins.add("https://admin.mbiopay.com");
+    origins.add("https://api.mbiopay.com");
+  }
 
   if (process.env.NODE_ENV !== "production") {
     origins.add("http://localhost:3000");
@@ -157,11 +168,44 @@ app.use("/api", globalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/signup", loginLimiter);
 app.use("/api/auth/google", loginLimiter);
+app.use("/api/auth/verify-email", loginLimiter);
+app.use("/api/auth/resend-verification", loginLimiter);
+app.use("/api/auth/forgot-password", loginLimiter);
+app.use("/api/auth/reset-password", loginLimiter);
 
 // Visit tracking (MongoDB, non-blocking)
 app.use("/api", visitTracker);
 
 app.use("/api", router);
+
+// ── 404 handler ───────────────────────────────────────────────────────────────
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// ── Global error handler ──────────────────────────────────────────────────────
+// Catches any unhandled errors thrown by route handlers and returns a safe
+// JSON response instead of crashing the process or leaking stack traces.
+app.use((err: unknown, req: import("express").Request, res: import("express").Response, _next: import("express").NextFunction) => {
+  // Log with request context when pino-http has attached req.log
+  const log = (req as any).log ?? logger;
+
+  if (err instanceof SyntaxError && "body" in err) {
+    // express.json() parse error — malformed JSON body
+    res.status(400).json({ error: "Invalid JSON in request body" });
+    return;
+  }
+
+  log.error({ err }, "Unhandled request error");
+
+  const status = (err as any)?.status ?? (err as any)?.statusCode ?? 500;
+  const message =
+    process.env.NODE_ENV === "production"
+      ? "An unexpected error occurred. Please try again later."
+      : (err instanceof Error ? err.message : String(err));
+
+  res.status(typeof status === "number" ? status : 500).json({ error: message });
+});
 
 export default app;
 export { loginLimiter };

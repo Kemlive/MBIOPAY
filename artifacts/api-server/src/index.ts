@@ -3,6 +3,33 @@ import { logger } from "./lib/logger";
 import { startWalletWatcher } from "./lib/walletWatcher";
 import { connectMongo } from "./lib/mongodb";
 
+// ── Required environment variable validation ──────────────────────────────────
+// Fail fast at startup rather than crashing mid-request with a cryptic error.
+const REQUIRED_ENV_VARS: Array<{ name: string; hint: string }> = [
+  { name: "DATABASE_URL",    hint: "PostgreSQL connection string" },
+  { name: "JWT_SECRET",      hint: "Secret used to sign access tokens (min 32 chars recommended)" },
+  { name: "REFRESH_SECRET",  hint: "Secret used to sign refresh tokens (min 32 chars recommended)" },
+  { name: "ENCRYPTION_KEY",  hint: "AES-256 key for encrypting wallet private keys" },
+];
+
+if (process.env.NODE_ENV === "production") {
+  const missing = REQUIRED_ENV_VARS.filter(({ name }) => !process.env[name]);
+  if (missing.length > 0) {
+    for (const { name, hint } of missing) {
+      console.error(`[startup] Missing required env var: ${name} — ${hint}`);
+    }
+    process.exit(1);
+  }
+
+  // Warn about weak secrets (too short to be safe)
+  for (const name of ["JWT_SECRET", "REFRESH_SECRET", "ENCRYPTION_KEY"]) {
+    const val = process.env[name] ?? "";
+    if (val.length < 32) {
+      console.warn(`[startup] WARNING: ${name} is shorter than 32 characters — use a longer, random secret in production`);
+    }
+  }
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

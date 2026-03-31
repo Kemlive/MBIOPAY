@@ -8,9 +8,15 @@ import { eq, and, gt, lt } from "drizzle-orm";
 import { signAccess, signRefresh, verifyRefresh } from "../lib/jwt";
 import { requireAuth } from "../lib/auth-middleware";
 import { isDisposableEmail } from "../lib/disposableEmails";
-import { sendPasswordResetEmail } from "../lib/emailService";
+import { sendPasswordResetEmail, sendVerificationEmail } from "../lib/emailService";
 import { sendOTP, verifyOTP, isIPBlocked } from "../lib/otpService";
 import speakeasy from "speakeasy";
+
+const VERIFY_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function generateVerifyCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 const router = Router();
 
