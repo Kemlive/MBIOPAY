@@ -1,6 +1,0 @@
-[railpack]
-# Standard railpack settings
-
-buildCommand = "pnpm install && pnpm --filter @workspace/app-ui run build"
-startCommand = "pnpm --filter @workspace/app-ui run serve"
-healthcheckPath = "/app-ui/"
