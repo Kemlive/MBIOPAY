@@ -1,47 +1,20 @@
-import app from "./app";
-import { logger } from "./lib/logger";
-import { startWalletWatcher } from "./lib/walletWatcher";
-import { connectMongo } from "./lib/mongodb";
+import express from "express";
 
-const rawPort = process.env["PORT"];
+const app = express();
 
-if (!rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-// Connect to MongoDB (non-blocking — app starts regardless)
-connectMongo().catch(() => {});
-
-const server = app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
-  logger.info({ port }, "Server listening");
-  startWalletWatcher();
+app.get("/", (req, res) => {
+  res.send("WORKING");
 });
 
-// ── Graceful shutdown — ensures port is released immediately on SIGTERM ────────
-function shutdown(signal: string) {
-  logger.info({ signal }, "Shutting down gracefully…");
-  server.close(() => {
-    logger.info("All connections closed. Exiting.");
-    process.exit(0);
-  });
+process.on("uncaughtException", err => {
+  console.error("CRASH:", err);
+});
 
-  // Force-kill if connections hang beyond 5s
-  setTimeout(() => {
-    logger.warn("Forced exit after 5s shutdown timeout");
-    process.exit(1);
-  }, 5000).unref();
-}
+process.on("unhandledRejection", err => {
+  console.error("REJECTION:", err);
+});
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT",  () => shutdown("SIGINT"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("API Server running on port", PORT);
+});
