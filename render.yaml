@@ -1,0 +1,34 @@
+services:
+  # 1. Frontend Service (Static Site)
+  - type: static
+    name: my-frontend
+    env: static
+    rootDir: apps/frontend
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    buildFilter:
+      paths:
+        - apps/frontend/**
+      ignoredPaths:
+        - apps/frontend/README.md
+
+  # 2. Backend Service (Web Service)
+  - type: web
+    name: my-backend
+    runtime: node
+    rootDir: apps/backend
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: my-db
+          property: connectionString
+    buildFilter:
+      paths:
+        - apps/backend/**
+
+# 3. Managed Database
+databases:
+  - name: my-db
+    plan: free # or standard
