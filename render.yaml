@@ -1,13 +1,14 @@
-services:
-  # 1. Frontend Service (Static Site)
-  - type: web           # Change from 'static' to 'web'
-    name: my-frontend
-    runtime: static     # This defines it as a Static Site
-    rootDir: apps/frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist  # Use 'staticPublishPath' for static sites
-    buildFilter:
-      paths:
-        - apps/frontend/**
-      ignoredPaths:
-        - apps/frontend/README.md
+{
+  "name": "mbiopay",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "license": "MIT",  // <--- Add this line
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    ...
+  }
+}
+
